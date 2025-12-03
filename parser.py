@@ -6,8 +6,8 @@ import pandas as pd
 # Directory with your per-scenario log/text files
 LOG_DIR = Path("data")
 
-# Output CSV
-OUTPUT_CSV = LOG_DIR / "tracking_logs.csv"
+# Output CSV to data/processed/tracking_logs.csv
+OUTPUT_CSV = LOG_DIR / "processed" / "tracking_logs.csv"
 
 # Scenario base names (file stems and label prefixes)
 SCENARIO_BASES = [
