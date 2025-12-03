@@ -1,0 +1,10 @@
+services:
+  analysis:
+    build: .
+    container_name: tracking-analysis
+    working_dir: /vp_basefree_tracking_dockerized
+    volumes:
+      # Mount local data folder into the container
+      - ./data:/vp_basefree_tracking_dockerized/data
+
+    command: ["python", "parser.py"]
