@@ -7,4 +7,4 @@ services:
       # Mount local data folder into the container
       - ./data:/vp_basefree_tracking_dockerized/data
 
-    command: ["python", "parser.py"]
+    command: ["bash", "scripts/run_linear.sh"]
