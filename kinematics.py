@@ -8,7 +8,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-# Columns in the raw tracking data
 POS_AXES: List[str] = ["X_pose", "Y_pose", "Z_pose"]
 ROT_AXES: List[str] = ["X_rot", "Y_rot", "Z_rot"]
 ALL_AXES: List[str] = POS_AXES + ROT_AXES
@@ -35,7 +34,6 @@ def compute_kinematics(
     if missing:
         raise ValueError(f"Missing expected columns in input: {missing}")
 
-    # Ensure deterministic ordering
     df = df.sort_values(["label", "time"]).reset_index(drop=True)
 
     out_rows = []
@@ -61,13 +59,10 @@ def compute_kinematics(
             }
         )
 
-        # Velocity and acceleration per axis using numerical gradient over time
         for axis in ALL_AXES:
             x = g[axis].to_numpy(dtype=float)
 
-            # Velocity: dx/dt
             v = np.gradient(x, t)
-            # Acceleration: dv/dt
             a = np.gradient(v, t)
 
             out[f"V_{axis}"] = v
@@ -77,7 +72,6 @@ def compute_kinematics(
 
     result = pd.concat(out_rows, ignore_index=True)
 
-    # Ensure output directory exists
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     result.to_csv(output_path, index=False)
 
@@ -90,11 +84,10 @@ def plot_axis_timeseries(
     axis: str,
     raw_path: str = "data/processed/tracking_logs.csv",
     derived_path: str = "data/derived/tracking_derivatives.csv",
+    output_dir: str = "data/plots/kinematics",
 ) -> None:
     """
     Visualise position, velocity and acceleration for a given label & axis.
-
-    axis must be one of: X_pose, Y_pose, Z_pose, X_rot, Y_rot, Z_rot
     """
     if axis not in ALL_AXES:
         raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
@@ -108,7 +101,6 @@ def plot_axis_timeseries(
     if raw_l.empty or drv_l.empty:
         raise ValueError(f"No data found for label '{label}'")
 
-    # Merge on time to keep alignment robust
     merged = pd.merge(
         raw_l[["time", axis]],
         drv_l[["time", f"V_{axis}", f"A_{axis}"]],
@@ -121,7 +113,7 @@ def plot_axis_timeseries(
     vel = merged[f"V_{axis}"].to_numpy()
     acc = merged[f"A_{axis}"].to_numpy()
 
-    plt.figure()
+    plt.figure(figsize=(10, 6))
     plt.plot(t, pos, label="position")
     plt.plot(t, vel, label="velocity")
     plt.plot(t, acc, label="acceleration")
@@ -130,7 +122,89 @@ def plot_axis_timeseries(
     plt.title(f"{label} – {axis}")
     plt.legend()
     plt.tight_layout()
-    plt.show()
+
+    os.makedirs(output_dir, exist_ok=True)
+    fname = f"{label}_{axis}.jpg"
+    out_path = os.path.join(output_dir, fname)
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    print(f"[kinematics] Saved plot to {out_path}")
+
+
+def plot_axis_by_scenario(
+    scenario: str,
+    axis: str,
+    raw_path: str = "data/processed/tracking_logs.csv",
+    derived_path: str = "data/derived/tracking_derivatives.csv",
+    output_dir: str = "data/plots/kinematics_scenarios",
+) -> None:
+    """
+    For a given scenario and axis, overlay all takes:
+
+    - 3 subplots: position, velocity, acceleration vs time
+    - each take (label) is a separate line
+    - time is shifted so each take starts at t=0
+
+    Saves a jpg to output_dir.
+    """
+    if axis not in ALL_AXES:
+        raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
+
+    raw = pd.read_csv(raw_path)
+    drv = pd.read_csv(derived_path)
+
+    raw_s = raw[raw["scenario"] == scenario]
+    drv_s = drv[drv["scenario"] == scenario]
+
+    if raw_s.empty or drv_s.empty:
+        raise ValueError(f"No data found for scenario '{scenario}'")
+
+    os.makedirs(output_dir, exist_ok=True)
+    fname = f"{scenario}_{axis}.jpg"
+    out_path = os.path.join(output_dir, fname)
+
+    plt.figure(figsize=(12, 9))
+
+    ax_pos = plt.subplot(3, 1, 1)
+    ax_vel = plt.subplot(3, 1, 2)
+    ax_acc = plt.subplot(3, 1, 3)
+
+    for label, g_raw in raw_s.groupby("label"):
+        g_raw = g_raw.sort_values("time")
+        g_drv = drv_s[drv_s["label"] == label].sort_values("time")
+
+        merged = pd.merge(
+            g_raw[["time", axis]],
+            g_drv[["time", f"V_{axis}", f"A_{axis}"]],
+            on="time",
+            how="inner",
+        )
+        if merged.empty:
+            continue
+
+        t = merged["time"].to_numpy()
+        t0 = t - t[0]  # align each take to t=0
+        pos = merged[axis].to_numpy()
+        vel = merged[f"V_{axis}"].to_numpy()
+        acc = merged[f"A_{axis}"].to_numpy()
+
+        ax_pos.plot(t0, pos, label=label)
+        ax_vel.plot(t0, vel, label=label)
+        ax_acc.plot(t0, acc, label=label)
+
+    ax_pos.set_title(f"{scenario} – {axis}")
+    ax_acc.set_xlabel("time since start of take (s)")
+    ax_pos.set_ylabel("position")
+    ax_vel.set_ylabel("velocity")
+    ax_acc.set_ylabel("acceleration")
+
+    ax_pos.legend(fontsize="small", ncol=2)
+    plt.tight_layout()
+
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"[kinematics] Saved scenario plot to {out_path}")
 
 
 def main():
@@ -150,21 +224,38 @@ def main():
     parser.add_argument(
         "--plot-label",
         type=str,
-        help="Optional: label to plot (uses data from input & output paths)",
+        help="Label to plot (position/velocity/acceleration over time)",
+    )
+    parser.add_argument(
+        "--plot-scenario",
+        type=str,
+        help="Scenario to plot (overlays all takes) – used with --plot-axis",
     )
     parser.add_argument(
         "--plot-axis",
         type=str,
-        help="Optional: axis to plot (e.g. X_pose, Y_rot). Requires --plot-label.",
+        help="Axis to plot (e.g. X_pose, Y_rot)",
     )
 
     args = parser.parse_args()
 
-    # Always compute derivatives when the script runs
     compute_kinematics(args.input, args.output)
 
     if args.plot_label and args.plot_axis:
-        plot_axis_timeseries(args.plot_label, args.plot_axis, args.input, args.output)
+        plot_axis_timeseries(
+            label=args.plot_label,
+            axis=args.plot_axis,
+            raw_path=args.input,
+            derived_path=args.output,
+        )
+
+    if args.plot_scenario and args.plot_axis:
+        plot_axis_by_scenario(
+            scenario=args.plot_scenario,
+            axis=args.plot_axis,
+            raw_path=args.input,
+            derived_path=args.output,
+        )
 
 
 if __name__ == "__main__":
