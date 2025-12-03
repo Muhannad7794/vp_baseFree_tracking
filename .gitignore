@@ -22,8 +22,9 @@ Thumbs.db
 build/
 dist/
 *.egg-info/
-data/tracking_logs.csv
+data/*.csv
 data/*.parquet
+data/*.txt
 output/
 reports/
 figures/
