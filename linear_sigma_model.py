@@ -197,7 +197,7 @@ def plot_sigma_and_speed_by_scenario(
     - each take (label) is a separate line
     - time is shifted so each take starts at t=0
 
-    Saves a PNG to output_dir.
+    Saves a jpg to output_dir.
     """
     if axis not in ALL_AXES:
         raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
@@ -219,7 +219,7 @@ def plot_sigma_and_speed_by_scenario(
         raise ValueError(f"No data for scenario '{scenario}'")
 
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, f"{scenario}_{axis}.png")
+    out_path = os.path.join(output_dir, f"{scenario}_{axis}.jpg")
 
     plt.figure(figsize=(12, 7))
     ax_sigma = plt.subplot(2, 1, 1)
@@ -248,15 +248,15 @@ def plot_sigma_and_speed_by_scenario(
     print(f"[linear_sigma_model] Saved scenario σ/speed plot to {out_path}")
 
 
-def plot_sigma_boxplot_by_scenario(
+def plot_sigma_bar_by_scenario(
     axis: str,
     modeled_path: str = "data/modeled/tracking_modelled_sigma.csv",
-    output_dir: str = "data/plots/linear_model_sigma_boxplots",
+    output_dir: str = "data/plots/linear_model_sigma_bars",
 ) -> None:
     """
-    For a given axis, plot a boxplot of σ distribution per scenario.
+    For a given axis, plot a bar chart of σ (90th percentile) per scenario.
 
-    One figure per axis, one box per scenario.
+    One figure per axis, one bar per scenario.
     """
     if axis not in ALL_AXES:
         raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
@@ -273,9 +273,8 @@ def plot_sigma_boxplot_by_scenario(
     df = df.dropna(subset=[sigma_col])
 
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, f"sigma_boxplot_{axis}.png")
+    out_path = os.path.join(output_dir, f"sigma_bar_{axis}.jpg")
 
-    # Scenario order to keep plots readable
     scenario_order = [
         "StillOnTripod",
         "handheld_still",
@@ -289,20 +288,53 @@ def plot_sigma_boxplot_by_scenario(
         "fast_tilt_tripod",
         "handheld_full_nav",
     ]
-    df["scenario"] = pd.Categorical(
-        df["scenario"], categories=scenario_order, ordered=True
-    )
-    df_sorted = df.sort_values("scenario")
+
+    vals = []
+    labels = []
+    for scen in scenario_order:
+        s = df.loc[df["scenario"] == scen, sigma_col]
+        if s.empty:
+            continue
+        labels.append(scen)
+        vals.append(np.percentile(s, 90))  # uses global np import
+
+    if not vals:
+        raise ValueError("No σ values found for any scenario")
+
+    x = np.arange(len(labels))
 
     plt.figure(figsize=(12, 6))
-    df_sorted.boxplot(column=sigma_col, by="scenario", rot=45)
-    plt.suptitle("")
-    plt.title(f"σ distribution by scenario – {axis}")
-    plt.ylabel("σ")
+
+    cmap = plt.get_cmap("tab20")
+    colors = [cmap(i % 20) for i in range(len(labels))]
+
+    plt.bar(x, vals, color=colors)
+
+    plt.xticks(
+        x,
+        labels,
+        rotation=30,
+        ha="right",
+        fontsize=8,
+    )
+
+    plt.ylabel(r"$\sigma$")
+    plt.xlabel("scenario")
+    plt.title(rf"$\sigma$ (90th percentile) by scenario – {axis}")
+
+    ymax = max(vals)
+    plt.ylim(0, ymax * 1.1)
+
+    from matplotlib.ticker import MaxNLocator
+
+    ax = plt.gca()
+    ax.yaxis.set_major_locator(MaxNLocator(nbins=8, integer=False))
+
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close()
-    print(f"[linear_sigma_model] Saved σ boxplot to {out_path}")
+
+    print(f"[linear_sigma_model] Saved σ bar plot to {out_path}")
 
 
 # -------------------------
@@ -349,9 +381,9 @@ def main():
         help="Axis to plot for scenario plots / boxplots (e.g. X_pose, Y_rot)",
     )
     parser.add_argument(
-        "--plot-boxplot-axis",
+        "--plot-bar-axis",
         type=str,
-        help="Axis to plot σ boxplot for across all scenarios (e.g. X_pose, Y_rot)",
+        help="Axis to plot σ bar chart for across all scenarios (e.g. X_pose, Y_rot)",
     )
 
     args = parser.parse_args()
@@ -410,9 +442,9 @@ def main():
             modeled_path=args.output,
         )
 
-    if args.plot_boxplot_axis:
-        plot_sigma_boxplot_by_scenario(
-            axis=args.plot_boxplot_axis,
+    if args.plot_bar_axis:
+        plot_sigma_bar_by_scenario(
+            axis=args.plot_bar_axis,
             modeled_path=args.output,
         )
 
