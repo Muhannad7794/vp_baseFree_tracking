@@ -1,4 +1,5 @@
 # linear_sigma_model.py
+
 import os
 import json
 import argparse
@@ -6,6 +7,7 @@ from typing import Dict, List
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 POS_AXES: List[str] = ["X_pose", "Y_pose", "Z_pose"]
@@ -108,7 +110,6 @@ def compute_sigma_ranges(
             max_sigma = float(dynamic_vals.median())
 
         if max_sigma <= min_sigma:
-            # Fallback: spread them a bit
             eps = abs(min_sigma) * 0.1 if min_sigma != 0 else 1e-4
             max_sigma = min_sigma + eps
 
@@ -178,6 +179,137 @@ def apply_linear_inverse_mapping(
     return speed_cfg
 
 
+# -------------------------
+# Plotting functions
+# -------------------------
+
+
+def plot_sigma_and_speed_by_scenario(
+    scenario: str,
+    axis: str,
+    modeled_path: str = "data/modeled/tracking_modelled_sigma.csv",
+    output_dir: str = "data/plots/linear_model_scenarios",
+) -> None:
+    """
+    For a given scenario and axis, overlay all takes:
+
+    - 2 subplots: σ vs time, InterpSpeed vs time
+    - each take (label) is a separate line
+    - time is shifted so each take starts at t=0
+
+    Saves a PNG to output_dir.
+    """
+    if axis not in ALL_AXES:
+        raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
+
+    sigma_col = f"sigma_{axis}"
+    speed_col = f"InterpSpeed_{axis}"
+
+    if not os.path.exists(modeled_path):
+        raise FileNotFoundError(f"Modeled CSV not found: {modeled_path}")
+
+    df = pd.read_csv(modeled_path)
+    if sigma_col not in df.columns or speed_col not in df.columns:
+        raise ValueError(
+            f"Expected columns '{sigma_col}' and '{speed_col}' in modeled CSV"
+        )
+
+    df_s = df[df["scenario"] == scenario]
+    if df_s.empty:
+        raise ValueError(f"No data for scenario '{scenario}'")
+
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, f"{scenario}_{axis}.png")
+
+    plt.figure(figsize=(12, 7))
+    ax_sigma = plt.subplot(2, 1, 1)
+    ax_speed = plt.subplot(2, 1, 2)
+
+    for label, g in df_s.groupby("label"):
+        g = g.sort_values("time")
+        t = g["time"].to_numpy()
+        t0 = t - t[0]
+
+        sigma = g[sigma_col].to_numpy()
+        speed = g[speed_col].to_numpy()
+
+        ax_sigma.plot(t0, sigma, label=label)
+        ax_speed.plot(t0, speed, label=label)
+
+    ax_sigma.set_ylabel("σ")
+    ax_speed.set_ylabel("InterpSpeed")
+    ax_speed.set_xlabel("time since start (s)")
+    ax_sigma.set_title(f"{scenario} – {axis}: σ and InterpSpeed")
+
+    ax_sigma.legend(fontsize="small", ncol=2)
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"[linear_sigma_model] Saved scenario σ/speed plot to {out_path}")
+
+
+def plot_sigma_boxplot_by_scenario(
+    axis: str,
+    modeled_path: str = "data/modeled/tracking_modelled_sigma.csv",
+    output_dir: str = "data/plots/linear_model_sigma_boxplots",
+) -> None:
+    """
+    For a given axis, plot a boxplot of σ distribution per scenario.
+
+    One figure per axis, one box per scenario.
+    """
+    if axis not in ALL_AXES:
+        raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
+
+    sigma_col = f"sigma_{axis}"
+
+    if not os.path.exists(modeled_path):
+        raise FileNotFoundError(f"Modeled CSV not found: {modeled_path}")
+
+    df = pd.read_csv(modeled_path)
+    if sigma_col not in df.columns:
+        raise ValueError(f"Expected column '{sigma_col}' in modeled CSV")
+
+    df = df.dropna(subset=[sigma_col])
+
+    os.makedirs(output_dir, exist_ok=True)
+    out_path = os.path.join(output_dir, f"sigma_boxplot_{axis}.png")
+
+    # Scenario order to keep plots readable
+    scenario_order = [
+        "StillOnTripod",
+        "handheld_still",
+        "controlled_on_tripod_pan",
+        "controlled_on_tripod_tilt",
+        "controlled_handheld_pan",
+        "controlled_handheld_tilt",
+        "slide_handheld",
+        "travel_handheld",
+        "fast_pan_tripod",
+        "fast_tilt_tripod",
+        "handheld_full_nav",
+    ]
+    df["scenario"] = pd.Categorical(
+        df["scenario"], categories=scenario_order, ordered=True
+    )
+    df_sorted = df.sort_values("scenario")
+
+    plt.figure(figsize=(12, 6))
+    df_sorted.boxplot(column=sigma_col, by="scenario", rot=45)
+    plt.suptitle("")
+    plt.title(f"σ distribution by scenario – {axis}")
+    plt.ylabel("σ")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"[linear_sigma_model] Saved σ boxplot to {out_path}")
+
+
+# -------------------------
+# CLI entry point
+# -------------------------
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Linear sigma model: rolling σ and inverse mapping."
@@ -192,7 +324,7 @@ def main():
         "--output",
         type=str,
         default="data/modeled/tracking_modelled_sigma.csv",
-        help="Output CSV (extended with σ and InterpSpeed columns)",
+        help="Output CSV (created with σ and InterpSpeed columns)",
     )
     parser.add_argument(
         "--config-output",
@@ -205,6 +337,21 @@ def main():
         type=int,
         default=25,
         help="Rolling window size (in frames) for σ computation",
+    )
+    parser.add_argument(
+        "--plot-scenario",
+        type=str,
+        help="Scenario to plot σ and InterpSpeed for (overlays all takes) – used with --plot-axis",
+    )
+    parser.add_argument(
+        "--plot-axis",
+        type=str,
+        help="Axis to plot for scenario plots / boxplots (e.g. X_pose, Y_rot)",
+    )
+    parser.add_argument(
+        "--plot-boxplot-axis",
+        type=str,
+        help="Axis to plot σ boxplot for across all scenarios (e.g. X_pose, Y_rot)",
     )
 
     args = parser.parse_args()
@@ -228,7 +375,7 @@ def main():
     # 3) linear inverse mapping σ -> InterpSpeed
     speed_cfg = apply_linear_inverse_mapping(df, sigma_ranges)
 
-    # 4) Write extended CSV
+    # 4) Write modeled CSV
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     df.to_csv(args.output, index=False)
     print(f"[linear_sigma_model] Created CSV written to {args.output}")
@@ -253,6 +400,21 @@ def main():
         json.dump(config, f, indent=2)
 
     print(f"[linear_sigma_model] σ ranges and speeds saved to {args.config_output}")
+
+    # 6) plotting
+
+    if args.plot_scenario and args.plot_axis:
+        plot_sigma_and_speed_by_scenario(
+            scenario=args.plot_scenario,
+            axis=args.plot_axis,
+            modeled_path=args.output,
+        )
+
+    if args.plot_boxplot_axis:
+        plot_sigma_boxplot_by_scenario(
+            axis=args.plot_boxplot_axis,
+            modeled_path=args.output,
+        )
 
 
 if __name__ == "__main__":
