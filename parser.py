@@ -4,11 +4,10 @@ import re
 import pandas as pd
 
 # Directory with your per-scenario log/text files
-LOG_DIR = Path("data")
+LOG_DIR = Path("data/raw")
 
 # Output CSV to data/processed/tracking_logs.csv
-OUTPUT_CSV = LOG_DIR / "processed" / "tracking_logs.csv"
-
+OUTPUT_CSV = LOG_DIR.parent / "processed" / "tracking_logs.csv"
 # Scenario base names (file stems and label prefixes)
 SCENARIO_BASES = [
     "controlled_handheld_pan",
