@@ -24,8 +24,9 @@ At the top level you should see something close to:
 ├── linear_sigma_model.py
 ├── smoothing_sim.py
 ├── README.md
-└── data/
-    ├── raw/          # (not versioned) Unreal log files or text exports
+├── scripts/          # Different bash scripts to choose from in docker compose CMD
+└── data/             # (not versioned)
+    ├── raw/          # Unreal log files or text exports
     ├── processed/    # tracking_logs.csv
     ├── derived/      # tracking_derivatives.csv
     ├── modeled/      # tracking_modelled_sigma.csv
