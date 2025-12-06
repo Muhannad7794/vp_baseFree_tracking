@@ -8,3 +8,13 @@ services:
       - ./data:/vp_basefree_tracking_dockerized/data
 
     command: ["bash", "scripts/run_linear.sh"]
+
+  piecewise:
+    build: .
+    container_name: tracking-piecewise
+    working_dir: /vp_basefree_tracking_dockerized
+    volumes:
+      # Mount local data folder into the container
+      - ./data:/vp_basefree_tracking_dockerized/data
+
+    command: ["bash", "scripts/run_piecewise.sh"]
