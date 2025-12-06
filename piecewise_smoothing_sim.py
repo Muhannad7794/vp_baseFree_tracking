@@ -242,10 +242,11 @@ def main():
     jitter_raw = compute_jitter(raw_arr)
     jitter_smooth = compute_jitter(smooth_arr)
     lag_ms = estimate_lag(raw_arr, smooth_arr, dt_mean)
+    jitter_reduction = jitter_raw / jitter_smooth if jitter_smooth > 0 else np.inf
 
     print(
         f"[piecewise_smoothing_sim] Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f} "
-        f"({jitter_raw / jitter_smooth:.2f}x lower)"
+        f"({jitter_reduction:.2f}x lower)"
         if jitter_smooth > 0
         else f"[piecewise_smoothing_sim] Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f}"
     )
@@ -254,30 +255,32 @@ def main():
     # Plot
     t = df["time"].to_numpy()
 
-    fig, axes = plt.subplots(3, 1, figsize=(12, 8), sharex=True)
+    plt.figure(figsize=(12, 9))
 
     # 1) Raw vs smoothed
-    ax0 = axes[0]
-    ax0.plot(t, raw_arr, label="raw")
-    ax0.plot(t, smooth_arr, label="smoothed")
+    ax0 = plt.subplot(3, 1, 1)
+    ax0.plot(t, raw_arr, label="raw", linewidth=1)
+    ax0.plot(t, smooth_arr, label="smoothed", linewidth=1)
     ax0.set_ylabel(args.axis)
     ax0.set_title(f"{args.label} – {args.axis}: raw vs smoothed")
     ax0.legend()
 
     # 2) Jitter comparison
-    ax1 = axes[1]
-    ax1.bar(["raw", "smoothed"], [jitter_raw, jitter_smooth])
-    if jitter_smooth > 0:
-        ratio = jitter_raw / jitter_smooth
-        ax1.set_title(
-            f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} ({ratio:.2f}x lower)"
-        )
-    else:
-        ax1.set_title(f"Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f}")
+    ax1 = plt.subplot(3, 1, 2)
+    bars_x = np.arange(2)
+    bars_vals = [jitter_raw, jitter_smooth]
+    bars_labels = ["raw", "smoothed"]
+    ax1.bar(bars_x, bars_vals, color=["tab:red", "tab:green"])
+    ax1.set_xticks(bars_x)
+    ax1.set_xticklabels(bars_labels)
     ax1.set_ylabel("jitter (RMS of diff/dt)")
+    ax1.set_title(
+        f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} "
+        f"({jitter_reduction:.2f}x lower)"
+    )
 
     # 3) Difference and lag
-    ax2 = axes[2]
+    ax2 = plt.subplot(3, 1, 3, sharex=ax1)
     diff = smooth_arr - raw_arr
     ax2.plot(t, diff, label="smoothed - raw")
     ax2.axhline(0.0, linestyle="--", linewidth=0.8)
@@ -291,7 +294,7 @@ def main():
     filename = f"{args.label}_{args.axis}_piecewise.jpg"
     out_path = os.path.join(args.output_dir, filename)
     plt.savefig(out_path, dpi=150)
-    plt.close(fig)
+    plt.close()
 
     print("[piecewise_smoothing_sim] Plot saved to", out_path)
 
