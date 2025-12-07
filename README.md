@@ -22,7 +22,7 @@ At the top level you should see something close to:
 ├── parser.py
 ├── kinematics.py
 ├── linear_sigma_model.py          # rolling σ + linear inverse mapping per axis
-├── smoothing_sim.py               # offline simulation using linear model
+├── linear_smoothing_sim.py               # offline simulation using linear model
 ├── piecewise_sigma_model.py       # rolling σ + piecewise inverse mapping per axis
 ├── piecewise_smoothing_sim.py     # offline simulation using piecewise model
 ├── README.md
@@ -48,14 +48,14 @@ At the top level you should see something close to:
 ```
 
 ### 1.1 Code files
-  // Architecture files:
+  #### Architecture files:
 - **`Dockerfile`**
   Defines a minimal Python image with the dependencies needed to run the pipeline.
 
 - **`docker-compose.yml`**
   Wraps the image into a service called `analysis`, mounts the `data/` folder from the host into the container, and sets the working directory and default command.
 
-// Data processing and feature engineering files:
+  #### Data processing and feature engineering files:
 - **`parser.py`**
   Parses raw Unreal Engine log or text files from `data/raw/`, extracts the lines produced by the logging blueprint, and writes a clean table to `data/processed/tracking_logs.csv`.
 
@@ -68,36 +68,37 @@ At the top level you should see something close to:
     and writes them to `data/derived/tracking_derivatives.csv`.
     It also provides plotting utilities for position / velocity / acceleration.
 
-// Modells and simulation files:
-  // Linear:
-- **`linear_sigma_model.py`**
-  Implements the sigma-based model:
+  #### Models and simulation files:
+  - Linear:
+    - **`linear_sigma_model.py`**
+      Implements the sigma-based model:
 
-  - computes rolling standard deviation of acceleration (`sigma_*`),
-  - calibrates per-axis `min_sigma` / `max_sigma` from labelled scenarios,
-  - maps `sigma` → `InterpSpeed_*` with a linear inverse mapping,
-  - writes the extended table to `data/modeled/tracking_modelled_sigma.csv`,
-  - writes configuration to `data/config/linear_sigma_ranges.json`,
-  - includes plotting utilities for `sigma` and `InterpSpeed`.
+      - computes rolling standard deviation of acceleration (`sigma_*`),
+      - calibrates per-axis `min_sigma` / `max_sigma` from labelled scenarios,
+      - maps `sigma` → `InterpSpeed_*` with a linear inverse mapping,
+      - writes the extended table to `data/modeled/tracking_modelled_sigma.csv`,
+      - writes configuration to `data/config/linear_sigma_ranges.json`,
+      - includes plotting utilities for `sigma` and `InterpSpeed`.
 
-- **`smoothing_sim.py`**
-  Replays a single take and axis and applies the same logic that will be used in Unreal:
+    - **`linear_smoothing_sim.py`**
+      Replays a single take and axis and applies the same logic that will be used in Unreal:
 
-  - recomputes rolling `sigma` online,
-  - looks up model parameters from `linear_sigma_ranges.json`,
-  - applies an FInterpTo-style smoothing step frame by frame,
-  - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
+      - recomputes rolling `sigma` online,
+      - looks up model parameters from
+    - **`linear_sigma_ranges.json`**
+      - applies an FInterpTo-style smoothing step frame by frame,
+      - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
 
-  // Piecewise:
-- **`piecewise_sigma_model.py`** – computes rolling σ per axis and calibrates
-  piecewise σ-breaks from the scenario groups *static / slow tripod / controlled handheld / medium / fast*.  
-  Writes `tracking_modelled_sigma_piecewise.csv` and
-  `data/config/piecewise_sigma_ranges.json`.
+  - Piecewise:
+    - **`piecewise_sigma_model.py`**
+      - computes rolling σ per axis and calibrates
+      piecewise σ-breaks from the scenario groups *static / slow tripod / controlled handheld / medium / fast*.
+      - writes the extended table to `data/modeled/tracking_modelled_sigma_piecewise.csv`,
+      - writes configuration to `data/config/piecewise_sigma_ranges.json`.
 
-- **`piecewise_smoothing_sim.py`** – replays a single take using the
-  piecewise mapping, then plots raw vs smoothed motion, jitter reduction and lag.
-  Plots go to `data/piecewise_plots/smoothing/`.
-
+    - **`piecewise_smoothing_sim.py`** – replays a single take using the
+      piecewise mapping, then plots raw vs smoothed motion, jitter reduction and lag.
+      Plots go to `data/piecewise_plots/smoothing/`.
 
 ---
 
@@ -233,8 +234,9 @@ After this, the output should be:
 
 - `data/derived/tracking_derivatives.csv`
 - `data/modeled/tracking_modelled_sigma.csv`
+- `data/modeled/tracking_modelled_sigma_<any additional models>.csv`
 - `data/config/linear_sigma_ranges.json`
-- `data/config/piecewise_sigma_ranges.json`
+- `data/config/<any additional models>_sigma_ranges.json`
 
 If you only want to recompute derivatives or models, you can call each script directly with `docker compose run --rm analysis python ...` as shown below.
 
@@ -242,7 +244,7 @@ If you only want to recompute derivatives or models, you can call each script di
 
 ## 4. Command-line usage and plotting scenarios
 
-Both **kinematics.py** and **linear_sigma_model.py** scripts expose a CLI. This section shows five typical plotting workflows and how to reproduce them.
+**kinematics.py** along with any  **<model>_sigma_model.py** scripts expose a CLI. This section shows some of the typical cases of using and utilizing the CLI to trigger the pipeline of the system, and generate different plots.
 
 ---
 
@@ -563,14 +565,12 @@ This project is structured so that individual components can be replaced or exte
   `linear_sigma_model.py` implements a single, interpretable baseline. More advanced models (piecewise linear, non-linear functions, learned regressors) can be implemented as new scripts that read `tracking_derivatives.csv` and write their own configuration and modelled CSVs.
 
 - **Runtime implementation**
-  The logic demonstrated in `smoothing_sim.py` maps directly to an Unreal Engine implementation:
+  The logic demonstrated in  any `*_smoothing_sim.py` maps directly to an Unreal Engine implementation:
 
   - Maintain a per-axis acceleration buffer.
   - Compute rolling σ with a fixed window size.
   - Map σ to InterpSpeed using pre-computed bounds.
   - Apply FInterpTo each frame.
-
-  These steps can be implemented as a C++ component or UE plugin that exposes a simple interface for camera actors, allowing the system to be packaged and reused in other virtual production projects.
 
 ---
 
@@ -589,4 +589,4 @@ To reproduce the core results:
 
 3. Generate any of the example plots using the CLI commands in §4.
 
-The combination of structured dataset, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further experiments or for deployment as a real-time smoothing component in Unreal Engine.
+The combination of structured dataset, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability and more models.
