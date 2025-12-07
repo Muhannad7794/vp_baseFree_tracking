@@ -87,10 +87,10 @@ The main entry point for the analysis is:
 
 `data/processed/tracking_logs.csv`
 
-This file is **not** in version control. Examiners can either:
+This file is **not** in version control. to replicate the setup, you can either:
 
-- Generate it from their own Unreal logs by placing `.log` / `.txt` files in `data/raw/` and running `parser.py`, or
-- Create their own `tracking_logs.csv` with the same schema.
+- Generate it from your own Unreal logs by placing `.log` / `.txt` files in `data/raw/` and running `parser.py`, or
+- Create your own `tracking_logs.csv` with the same schema.
 
 The expected columns are:
 
@@ -346,7 +346,7 @@ These bar plots justify the choice of `min_sigma` and `max_sigma` per axis and i
 
 ```bash
 docker compose run --rm analysis \
-  python smoothing_sim.py \
+  python linear_smoothing_sim.py \
     --logs data/processed/tracking_logs.csv \
     --derived data/derived/tracking_derivatives.csv \
     --config data/config/linear_sigma_ranges.json \
