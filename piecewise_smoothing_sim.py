@@ -1,4 +1,3 @@
-# piecewise_smoothing_sim.py
 """
 piecewise_smoothing_sim.py
 
@@ -18,7 +17,7 @@ import argparse
 import json
 import math
 import os
-from typing import List, Tuple
+from typing import Dict, List
 
 import matplotlib
 
@@ -28,7 +27,14 @@ import numpy as np
 import pandas as pd
 
 
-# ---- Helpers ----------------------------------------------------------------
+POS_AXES: List[str] = ["X_pose", "Y_pose", "Z_pose"]
+ROT_AXES: List[str] = ["X_rot", "Y_rot", "Z_rot"]
+ALL_AXES: List[str] = POS_AXES + ROT_AXES
+
+
+# ---------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------
 
 
 def ensure_dir(path: str) -> None:
@@ -40,6 +46,7 @@ def piecewise_speed_from_sigma(
     breaks: List[float],
     speeds: List[float],
 ) -> float:
+    """Piecewise-linear σ→InterpSpeed mapping."""
     if np.isnan(sigma):
         return np.nan
 
@@ -65,54 +72,283 @@ def piecewise_speed_from_sigma(
     return float(speeds[-1])
 
 
-def interp_to(current: float, target: float, dt: float, speed: float) -> float:
+def f_interp_to(current: float, target: float, dt: float, speed: float) -> float:
     """
-    Discrete FInterpTo-style update:
+    Scalar FInterpTo-style update:
 
-      Alpha = clamp(dt * Speed, 0, 1)
-      New   = Current + (Target - Current) * Alpha
+      Delta = Target - Current
+      DeltaMove = dt * speed
+      Alpha = clamp(DeltaMove, 0, 1)
+      New = Current + Alpha * Delta
     """
+    delta = target - current
+    if abs(delta) < 1e-6:
+        return target
+
     if dt <= 0.0 or speed <= 0.0:
         return target
-    alpha = dt * speed
-    if alpha > 1.0:
-        alpha = 1.0
-    return current + (target - current) * alpha
+
+    delta_move = dt * speed
+    alpha = max(0.0, min(1.0, delta_move))
+    return current + alpha * delta
 
 
-def compute_jitter(signal: np.ndarray) -> float:
+def jitter_metric(series: np.ndarray, dt: np.ndarray) -> float:
     """
-    Simple jitter metric: RMS of frame-to-frame differences
-    (approximate high-frequency energy).
-    """
-    if len(signal) < 2:
-        return 0.0
-    diff = np.diff(signal)
-    return float(np.sqrt(np.mean(diff * diff)))
+    Jitter / high-frequency energy metric:
 
-
-def estimate_lag(raw: np.ndarray, smoothed: np.ndarray, dt_mean: float) -> float:
+      RMS of first difference per unit time.
     """
-    Estimate lag by cross-correlation peak between demeaned signals.
-    Returns lag in milliseconds (smoothed vs raw).
-    """
-    if len(raw) != len(smoothed) or len(raw) < 2:
+    if len(series) < 2:
         return 0.0
 
-    r = raw - np.mean(raw)
-    s = smoothed - np.mean(smoothed)
-    corr = np.correlate(s, r, mode="full")
-    lag_idx = int(np.argmax(corr) - (len(raw) - 1))
-    lag_sec = lag_idx * dt_mean
-    return float(lag_sec * 1000.0)
+    diff = np.diff(series)
+
+    # Use mean dt as an approximation for per-step spacing.
+    valid_dt = dt[np.isfinite(dt) & (dt > 0)]
+    mean_dt = float(np.mean(valid_dt)) if valid_dt.size > 0 else 1.0
+
+    vel_est = diff / mean_dt
+    return float(np.sqrt(np.mean(vel_est**2)))
 
 
-# ---- Main -------------------------------------------------------------------
+def lag_estimate(raw: np.ndarray, smooth: np.ndarray, dt: np.ndarray) -> float:
+    """
+    Estimate lag (in seconds) between raw and smoothed signals using
+    cross-correlation. Positive lag means smoothed lags behind raw.
+    """
+    if len(raw) != len(smooth) or len(raw) < 2:
+        return 0.0
+
+    x = raw - np.mean(raw)
+    y = smooth - np.mean(smooth)
+
+    corr = np.correlate(x, y, mode="full")
+    lags = np.arange(-len(x) + 1, len(x))
+    best_idx = int(np.argmax(corr))
+    best_lag_samples = lags[best_idx]
+
+    valid_dt = dt[np.isfinite(dt) & (dt > 0)]
+    mean_dt = float(np.mean(valid_dt)) if valid_dt.size > 0 else 1.0
+    return float(best_lag_samples * mean_dt)
 
 
-def main():
+def make_piecewise_plots(
+    label: str,
+    axis: str,
+    sim: Dict[str, np.ndarray],
+    output_dir: str = "data/piecewise_plots/smoothing",
+) -> None:
+    """
+    Create JPG plots showing:
+      - raw vs smoothed motion over time
+      - jitter before vs after
+      - difference over time, annotated with lag
+
+    The layout and scaling follow the linear model for easier comparison.
+    """
+    ensure_dir(output_dir)
+    out_path = os.path.join(output_dir, f"{label}_{axis}_piecewise.jpg")
+
+    t = sim["time"]
+    dt = sim["dt"]
+    raw = sim["raw"]
+    smooth = sim["smooth"]
+
+    jitter_raw = jitter_metric(raw, dt)
+    jitter_smooth = jitter_metric(smooth, dt)
+    jitter_reduction = (jitter_raw / jitter_smooth) if jitter_smooth > 0 else np.inf
+    lag_sec = lag_estimate(raw, smooth, dt)
+
+    plt.figure(figsize=(12, 9))
+
+    # 1) Raw vs smoothed
+    ax1 = plt.subplot(3, 1, 1)
+    ax1.plot(t, raw, label="raw", linewidth=1)
+    ax1.plot(t, smooth, label="smoothed", linewidth=1)
+    ax1.set_ylabel(axis)
+    ax1.set_title(f"{label} – {axis}: raw vs smoothed (piecewise)")
+    ax1.legend()
+
+    # 2) Jitter comparison (bar plot)
+    ax2 = plt.subplot(3, 1, 2)
+    bars_x = np.arange(2)
+    bars_vals = [jitter_raw, jitter_smooth]
+    bars_labels = ["raw", "smoothed"]
+
+    ax2.bar(bars_x, bars_vals, color=["tab:red", "tab:green"])
+    ax2.set_xticks(bars_x)
+    ax2.set_xticklabels(bars_labels)
+
+    ymax = max(jitter_raw, jitter_smooth)
+    ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
+    ax2.set_ylabel("jitter (RMS of diff/dt)")
+    if jitter_smooth > 0:
+        ax2.set_title(
+            f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} "
+            f"({jitter_reduction:.2f}x lower)"
+        )
+    else:
+        ax2.set_title(f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f}")
+    ax2.grid(axis="y", linestyle="--", alpha=0.4)
+
+    # 3) Difference over time
+    ax3 = plt.subplot(3, 1, 3, sharex=ax1)
+    diff = smooth - raw
+    ax3.plot(t, diff, label="smoothed - raw", linewidth=1)
+    ax3.axhline(0.0, color="black", linewidth=0.5)
+    ax3.set_xlabel("time (s)")
+    ax3.set_ylabel("difference")
+    ax3.set_title(f"Lag estimate ≈ {lag_sec*1000:.1f} ms")
+    ax3.legend()
+
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close()
+
+    print(
+        f"[piecewise_smoothing_sim] Saved comparison plot to {out_path}\n"
+        f"  Jitter raw     : {jitter_raw:.4f}\n"
+        f"  Jitter smoothed: {jitter_smooth:.4f}\n"
+        f"  Reduction      : {jitter_reduction:.2f}x\n"
+        f"  Lag estimate   : {lag_sec*1000:.1f} ms"
+    )
+
+
+# ---------------------------------------------------------------------
+# Core simulation
+# ---------------------------------------------------------------------
+
+
+def run_piecewise_simulation_for_axis(
+    logs_df: pd.DataFrame,
+    drv_df: pd.DataFrame,
+    cfg: Dict,
+    label: str,
+    axis: str,
+) -> Dict[str, np.ndarray]:
+    """
+    Run the piecewise smoothing simulation for a single label and axis.
+
+    Returns a dictionary with time, dt, raw, smooth, sigma, speed.
+    """
+    if axis not in ALL_AXES:
+        raise ValueError(f"axis must be one of {ALL_AXES}, got {axis}")
+
+    axes_cfg = cfg.get("axes", {})
+    axis_cfg = axes_cfg.get(axis)
+    if axis_cfg is None:
+        raise ValueError(f"Axis '{axis}' not found in piecewise config JSON.")
+
+    sigma_breaks = axis_cfg["sigma_breaks"]
+    speed_levels = axis_cfg["speed_levels"]
+    max_speed_fallback = float(axis_cfg.get("max_speed", 40.0))
+
+    window = int(cfg.get("window_size", 25))
+    min_samples_for_sigma = max(1, window // 2)
+
+    # Extract this label from both raw and derivatives, sort by time.
+    raw = logs_df[logs_df["label"] == label].sort_values("time")
+    drv = drv_df[drv_df["label"] == label].sort_values("time")
+
+    if raw.empty or drv.empty:
+        raise ValueError(f"No data found for label '{label}'")
+
+    merged = pd.merge(
+        raw[["time", "label", axis]],
+        drv[["time", "label", "dt", f"A_{axis}"]],
+        on=["time", "label"],
+        how="inner",
+    )
+
+    if merged.empty:
+        raise ValueError(
+            f"After merge, no rows for label='{label}', axis='{axis}'. "
+            "Check that both CSVs contain matching time/label."
+        )
+
+    t = merged["time"].to_numpy(dtype=float)
+    dt = merged["dt"].to_numpy(dtype=float)
+    pose = merged[axis].to_numpy(dtype=float)
+    accel = merged[f"A_{axis}"].to_numpy(dtype=float)
+
+    # Replace NaN dt (typically first sample) with median dt.
+    valid_dt = dt[np.isfinite(dt)]
+    median_dt = float(np.median(valid_dt)) if valid_dt.size > 0 else 0.0
+    dt = np.where(np.isfinite(dt), dt, median_dt)
+
+    n = len(t)
+    smooth = np.zeros_like(pose)
+    sigma_arr = np.full_like(pose, np.nan, dtype=float)
+    speed_arr = np.full_like(pose, np.nan, dtype=float)
+
+    # Initial state: start virtual camera at first valid pose sample.
+    first_pose = pose[0]
+    if not np.isfinite(first_pose):
+        first_pose = 0.0
+    current = float(first_pose)
+    smooth[0] = current
+    if not np.isfinite(pose[0]):
+        pose[0] = current
+
+    accel_buffer: List[float] = []
+
+    for i in range(n):
+        target = pose[i]
+        if not np.isfinite(target):
+            # Replace invalid pose samples with the last smoothed value.
+            target = current
+
+        a = accel[i]
+        if math.isfinite(a):
+            accel_buffer.append(a)
+            if len(accel_buffer) > window:
+                accel_buffer.pop(0)
+
+        if len(accel_buffer) >= min_samples_for_sigma:
+            sigma = float(np.std(accel_buffer, ddof=0))
+        else:
+            sigma = np.nan
+
+        speed = piecewise_speed_from_sigma(sigma, sigma_breaks, speed_levels)
+        if not np.isfinite(speed):
+            speed = max_speed_fallback
+
+        current = f_interp_to(current, target, dt[i], speed)
+
+        smooth[i] = current
+        sigma_arr[i] = sigma
+        speed_arr[i] = speed
+
+    # Remove any remaining NaNs before metric computation.
+    mask = np.isfinite(pose) & np.isfinite(smooth) & np.isfinite(dt)
+    t = t[mask]
+    dt = dt[mask]
+    pose = pose[mask]
+    smooth = smooth[mask]
+    sigma_arr = sigma_arr[mask]
+    speed_arr = speed_arr[mask]
+
+    return {
+        "time": t,
+        "dt": dt,
+        "raw": pose,
+        "smooth": smooth,
+        "sigma": sigma_arr,
+        "speed": speed_arr,
+    }
+
+
+# ---------------------------------------------------------------------
+# CLI entry point
+# ---------------------------------------------------------------------
+
+
+def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Simulate piecewise σ→InterpSpeed smoothing on a single label and axis."
+        description=(
+            "Simulate piecewise σ→InterpSpeed smoothing on a single label and axis."
+        )
     )
     parser.add_argument(
         "--logs",
@@ -122,12 +358,14 @@ def main():
     parser.add_argument(
         "--derivatives",
         default="data/derived/tracking_derivatives.csv",
-        help="CSV with dt and accelerations (default: data/derived/tracking_derivatives.csv)",
+        help="CSV with dt and accelerations "
+        "(default: data/derived/tracking_derivatives.csv)",
     )
     parser.add_argument(
         "--config",
         default="data/config/piecewise_sigma_ranges.json",
-        help="Piecewise model config JSON (default: data/config/piecewise_sigma_ranges.json)",
+        help="Piecewise model config JSON "
+        "(default: data/config/piecewise_sigma_ranges.json)",
     )
     parser.add_argument(
         "--label",
@@ -150,166 +388,31 @@ def main():
     ensure_dir(args.output_dir)
 
     print("[piecewise_smoothing_sim] Loading logs:", args.logs)
-    df_logs = pd.read_csv(args.logs)
+    logs_df = pd.read_csv(args.logs)
 
     print("[piecewise_smoothing_sim] Loading derivatives:", args.derivatives)
-    df_der = pd.read_csv(args.derivatives)
+    drv_df = pd.read_csv(args.derivatives)
 
-    # Filter by label and sort by time
-    df_logs = df_logs[df_logs["label"] == args.label].sort_values("time")
-    df_der = df_der[df_der["label"] == args.label].sort_values("time")
+    if args.label not in logs_df["label"].unique():
+        raise ValueError(f"Label '{args.label}' not found in logs CSV.")
 
-    if df_logs.empty or df_der.empty:
-        raise ValueError(f"No data found for label {args.label}")
-
-    # Join on time (assume unique times per label)
-    df = pd.merge(
-        df_logs[["time", "label", args.axis]],
-        df_der[["time", "label", "dt", f"A_{args.axis}"]],
-        on=["time", "label"],
-        how="inner",
-    ).copy()
-
-    if df.empty:
-        raise ValueError(
-            f"After merge, no rows for label={args.label}, axis={args.axis}. "
-            f"Check that both CSVs contain matching time/label."
-        )
-
-    # Load model config
     with open(args.config, "r", encoding="utf-8") as f:
         cfg = json.load(f)
 
-    axis_cfg = cfg["axes"].get(args.axis)
-    if axis_cfg is None:
-        raise ValueError(f"Axis {args.axis} not found in config {args.config}")
-
-    sigma_breaks = axis_cfg["sigma_breaks"]
-    speed_levels = axis_cfg["speed_levels"]
-    window = int(cfg.get("window_size", 25))
-
     print(
-        f"[piecewise_smoothing_sim] Axis={args.axis}, window={window}, "
-        f"{len(sigma_breaks)} sigma breaks"
+        f"[piecewise_smoothing_sim] Running simulation for "
+        f"label='{args.label}', axis='{args.axis}'"
     )
 
-    # Simulation buffers
-    accel_buffer: List[float] = []
-    raw_vals: List[float] = []
-    smooth_vals: List[float] = []
-    sigmas: List[float] = []
-    speeds: List[float] = []
-
-    pose_col = args.axis
-    accel_col = f"A_{args.axis}"
-
-    # Initialise smoothed value at first pose
-    current = float(df.iloc[0][pose_col])
-
-    for _, row in df.iterrows():
-        target = float(row[pose_col])
-
-        dt = float(row["dt"])
-        # Protect against NaN / inf on the first sample
-        if not math.isfinite(dt):
-            dt = 0.0
-
-        a = float(row[accel_col])
-        # Optionally ignore non-finite accelerations (defensive)
-        if math.isfinite(a):
-            accel_buffer.append(a)
-            if len(accel_buffer) > window:
-                accel_buffer.pop(0)
-
-        if len(accel_buffer) > 1:
-            sigma = float(np.std(accel_buffer))
-        else:
-            sigma = 0.0
-
-        speed = piecewise_speed_from_sigma(sigma, sigma_breaks, speed_levels)
-        current = interp_to(current, target, dt, speed)
-
-        raw_vals.append(target)
-        smooth_vals.append(current)
-        sigmas.append(sigma)
-        speeds.append(speed)
-
-    raw_arr = np.array(raw_vals)
-    smooth_arr = np.array(smooth_vals)
-    dt_mean = float(df["dt"].mean())
-
-    # Metrics
-    jitter_raw = compute_jitter(raw_arr)
-    jitter_smooth = compute_jitter(smooth_arr)
-    jitter_reduction = jitter_raw / jitter_smooth if jitter_smooth > 0 else np.inf
-    
-    lag_ms = estimate_lag(raw_arr, smooth_arr, dt_mean)
-    
-
-    print(
-        f"[piecewise_smoothing_sim] Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f} "
-        f"({jitter_reduction:.2f}x lower)"
-        if jitter_smooth > 0
-        else f"[piecewise_smoothing_sim] Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f}"
+    sim = run_piecewise_simulation_for_axis(
+        logs_df=logs_df,
+        drv_df=drv_df,
+        cfg=cfg,
+        label=args.label,
+        axis=args.axis,
     )
-    print(f"[piecewise_smoothing_sim] Lag estimate ≈ {lag_ms:.1f} ms")
 
-    # Plot
-    t = df["time"].to_numpy()
-
-    plt.figure(figsize=(12, 9))
-
-    # 1) Raw vs smoothed
-    ax0 = plt.subplot(3, 1, 1)
-    ax0.plot(t, raw_arr, label="raw", linewidth=1)
-    ax0.plot(t, smooth_arr, label="smoothed", linewidth=1)
-    ax0.set_ylabel(args.axis)
-    ax0.set_title(f"{args.label} – {args.axis}: raw vs smoothed")
-    ax0.legend()
-
-    # 2) Jitter comparison
-    ax1 = plt.subplot(3, 1, 2)
-    x_pos = [0, 1]
-    width = 0.6
-
-    ax1.bar(x_pos[0], jitter_raw, width=width, color="tab:red", label="raw")
-    ax1.bar(x_pos[1], jitter_smooth, width=width, color="tab:green", label="smoothed")
-
-    ax1.set_xticks(x_pos)
-    ax1.set_xticklabels(["raw", "smoothed"])
-    ax1.set_xlim(-0.5, 1.5)
-
-    ymax = max(jitter_raw, jitter_smooth)
-    # Add some headroom so bars don't touch the top
-    ax1.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
-
-    ax1.set_ylabel("jitter (RMS of diff/dt)")
-    ax1.set_title(
-        f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} "
-        f"({jitter_reduction:.2f}x lower)"
-        if jitter_smooth > 0
-        else f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f}"
-    )
-    ax1.grid(axis="y", linestyle="--", alpha=0.4)
-
-    # 3) Difference over time
-    ax2 = plt.subplot(3, 1, 3)
-    diff = smooth_arr - raw_arr
-    ax2.plot(t, diff, linewidth=1)
-    ax2.axhline(0.0, color="black", linewidth=0.5)
-    ax2.set_xlabel("time (s)")
-    ax2.set_ylabel("difference")
-    ax2.set_title(f"Lag estimate ≈ {lag_ms:.1f} ms")
-
-    plt.tight_layout()
-
-
-    filename = f"{args.label}_{args.axis}_piecewise.jpg"
-    out_path = os.path.join(args.output_dir, filename)
-    plt.savefig(out_path, dpi=150)
-    plt.close()
-
-    print("[piecewise_smoothing_sim] Plot saved to", out_path)
+    make_piecewise_plots(args.label, args.axis, sim, output_dir=args.output_dir)
 
 
 if __name__ == "__main__":
