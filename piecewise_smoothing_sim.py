@@ -267,27 +267,37 @@ def main():
 
     # 2) Jitter comparison
     ax1 = plt.subplot(3, 1, 2)
-    bars_x = np.arange(2)
-    bars_vals = [jitter_raw, jitter_smooth]
-    bars_labels = ["raw", "smoothed"]
-    ax1.bar(bars_x, bars_vals, color=["tab:red", "tab:green"])
-    ax1.set_xticks(bars_x)
-    ax1.set_xticklabels(bars_labels)
+    x_pos = [0, 1]
+    width = 0.6
+
+    ax1.bar(x_pos[0], jitter_raw, width=width, color="tab:red", label="raw")
+    ax1.bar(x_pos[1], jitter_smooth, width=width, color="tab:green", label="smoothed")
+
+    ax1.set_xticks(x_pos)
+    ax1.set_xticklabels(["raw", "smoothed"])
+    ax1.set_xlim(-0.5, 1.5)
+
+    ymax = max(jitter_raw, jitter_smooth)
+    # Add some headroom so bars don't touch the top
+    ax1.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
+
     ax1.set_ylabel("jitter (RMS of diff/dt)")
     ax1.set_title(
         f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} "
         f"({jitter_reduction:.2f}x lower)"
+        if jitter_smooth > 0
+        else f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f}"
     )
+    ax1.grid(axis="y", linestyle="--", alpha=0.4)
 
-    # 3) Difference and lag
-    ax2 = plt.subplot(3, 1, 3, sharex=ax1)
+    # 3) Difference over time
+    ax2 = plt.subplot(3, 1, 3)
     diff = smooth_arr - raw_arr
-    ax2.plot(t, diff, label="smoothed - raw")
-    ax2.axhline(0.0, linestyle="--", linewidth=0.8)
+    ax2.plot(t, diff, linewidth=1)
+    ax2.axhline(0.0, color="black", linewidth=0.5)
     ax2.set_xlabel("time (s)")
     ax2.set_ylabel("difference")
     ax2.set_title(f"Lag estimate ≈ {lag_ms:.1f} ms")
-    ax2.legend()
 
     plt.tight_layout()
 
