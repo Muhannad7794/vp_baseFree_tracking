@@ -241,8 +241,10 @@ def main():
     # Metrics
     jitter_raw = compute_jitter(raw_arr)
     jitter_smooth = compute_jitter(smooth_arr)
-    lag_ms = estimate_lag(raw_arr, smooth_arr, dt_mean)
     jitter_reduction = jitter_raw / jitter_smooth if jitter_smooth > 0 else np.inf
+    
+    lag_ms = estimate_lag(raw_arr, smooth_arr, dt_mean)
+    
 
     print(
         f"[piecewise_smoothing_sim] Jitter: {jitter_raw:.3f} → {jitter_smooth:.3f} "
@@ -300,6 +302,7 @@ def main():
     ax2.set_title(f"Lag estimate ≈ {lag_ms:.1f} ms")
 
     plt.tight_layout()
+
 
     filename = f"{args.label}_{args.axis}_piecewise.jpg"
     out_path = os.path.join(args.output_dir, filename)

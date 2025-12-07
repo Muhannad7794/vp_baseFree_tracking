@@ -242,6 +242,7 @@ def make_plots(
     raw = sim["raw"]
     smooth = sim["smooth"]
 
+    # Metrics
     jitter_raw = jitter_metric(raw, dt)
     jitter_smooth = jitter_metric(smooth, dt)
     jitter_reduction = (jitter_raw / jitter_smooth) if jitter_smooth > 0 else np.inf
@@ -261,16 +262,23 @@ def make_plots(
     # 2) Jitter metric bar plot
     ax2 = plt.subplot(3, 1, 2)
     bars_x = np.arange(2)
+
     bars_vals = [jitter_raw, jitter_smooth]
     bars_labels = ["raw", "smoothed"]
+
     ax2.bar(bars_x, bars_vals, color=["tab:red", "tab:green"])
     ax2.set_xticks(bars_x)
     ax2.set_xticklabels(bars_labels)
+    ymax = max(jitter_raw, jitter_smooth)
+    ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
     ax2.set_ylabel("jitter (RMS of diff/dt)")
     ax2.set_title(
         f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f} "
         f"({jitter_reduction:.2f}x lower)"
+        if jitter_smooth > 0
+        else f"Jitter reduction: {jitter_raw:.3f} → {jitter_smooth:.3f}"
     )
+    ax2.grid(axis="y", linestyle="--", alpha=0.4)
 
     # 3) Difference over time, with lag annotation
     ax3 = plt.subplot(3, 1, 3, sharex=ax1)
