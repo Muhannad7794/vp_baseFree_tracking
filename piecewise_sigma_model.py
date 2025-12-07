@@ -267,7 +267,7 @@ def plot_sigma_and_speed_by_scenario(
 def plot_sigma_bar_by_scenario(
     axis: str,
     modeled_path: str = "data/modeled/tracking_modelled_sigma_piecewise.csv",
-    output_dir: str = "data/piecewise_plots/piecewise__model_sigma_bars",
+    output_dir: str = "data/piecewise_plots/piecewise_model_sigma_bars",
 ) -> None:
     """
     For a given axis, plot a bar chart of σ (90th percentile) per scenario.
