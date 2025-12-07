@@ -524,7 +524,10 @@ Each figure has three parts:
 These simulations validate that the piecewise algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
 ---
 
-** This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset. **
+
+**This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
+---
+
 
 ## 4.9 Linear Sommthing VS Piecewise Smoothing**
 | Linear Smoothing – controlled_handheld_pan_Y_rot                                                     | Piecewise Smoothing – controlled_handheld_pan_Y_rot                                                      |
