@@ -48,14 +48,14 @@ At the top level you should see something close to:
 ```
 
 ### 1.1 Code files
-  #### Architecture files:
+#### Architecture files:
 - **`Dockerfile`**
   Defines a minimal Python image with the dependencies needed to run the pipeline.
 
 - **`docker-compose.yml`**
   Wraps the image into a service called `analysis`, mounts the `data/` folder from the host into the container, and sets the working directory and default command.
 
-  #### Data processing and feature engineering files:
+#### Data processing and feature engineering files:
 - **`parser.py`**
   Parses raw Unreal Engine log or text files from `data/raw/`, extracts the lines produced by the logging blueprint, and writes a clean table to `data/processed/tracking_logs.csv`.
 
@@ -68,8 +68,8 @@ At the top level you should see something close to:
     and writes them to `data/derived/tracking_derivatives.csv`.
     It also provides plotting utilities for position / velocity / acceleration.
 
-  #### Models and simulation files:
-  - Linear:
+#### Models and simulation files:
+  - ***Linear***:
     - **`linear_sigma_model.py`**
       Implements the sigma-based model:
 
@@ -89,7 +89,7 @@ At the top level you should see something close to:
       - applies an FInterpTo-style smoothing step frame by frame,
       - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
 
-  - Piecewise:
+  - ***Piecewise***:
     - **`piecewise_sigma_model.py`**
       - computes rolling σ per axis and calibrates
       piecewise σ-breaks from the scenario groups *static / slow tripod / controlled handheld / medium / fast*.
@@ -191,7 +191,11 @@ Running the full pipeline produces:
     "axes": {
       "X_pose": {
         "sigma_breaks": [..., ..., ..., ..., ...],
-        "speed_levels": [..., ..., ..., ..., ...]
+        "speed_levels": [..., ..., ..., ..., ...],
+        "min_sigma": ...,
+        "max_sigma": ...,
+        "min_speed": ...,
+        "max_speed": ...
       },
       ...
     }
