@@ -603,12 +603,12 @@ docker compose run --rm sigmoid \
     --plot-axis Y_rot
 ```
 Output example:
-- `data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot_sigmoid.jpg`
-- `data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot_sigmoid.jpg`
+- `data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot.jpg`
+- `data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot.jpg`
 
 | controlled_handheld_pan – Y_rot                                                                                              | fast_pan_tripod – Y_rot                                                                                      |
 | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot_sigmoid.jpg) | ![fast_pan_tripod_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot_sigmoid.jpg) |
+| ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot.jpg) | ![fast_pan_tripod_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot.jpg) |
 
 **What these graphs show**
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
@@ -630,12 +630,12 @@ docker compose run --rm sigmoid \
     --plot-bar-axis Z_pose
 ```
 Output example:
-- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose_sigmoid.jpg`
-- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot_sigmoid.jpg`
+- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose.jpg`
+- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot.jpg`
 
 | σ (90th percentile) – Z_pose                                                                        | σ (90th percentile) – Z_rot                                                                       |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| ![sigma_bar_Z_pose](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose_sigmoid.jpg) | ![sigma_bar_Z_rot](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot_sigmoid.jpg) |
+| ![sigma_bar_Z_pose](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose.jpg) | ![sigma_bar_Z_rot](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot.jpg) |
 
 **What these graphs show**
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
