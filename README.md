@@ -574,7 +574,7 @@ Each figure has three parts:
 
 - ### Comparitive Analysis:
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
-  - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potental latency trade-offs in certain scenarios.
+  - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
   - The difference between the models from the last example will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
 
@@ -597,7 +597,7 @@ This project is structured so that individual components can be replaced or exte
   - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
 
 - **Runtime implementation**
-  - The logic demonstrated in `<any_additional_model(s)>_smoothing_sim.py` maps directly to an Unreal Engine implementation.
+  - The logic demonstrated in `<any_model>_smoothing_sim.py` maps directly to an Unreal Engine implementation.
   - The flexibility offered by the system to create different models allow for different runtime implementations within Unreal Engine to be tested and compared easily.
   - All different runtime implementations will apply their own smoothing logic, while adhering to the same overall principles:
     - Maintain a per-axis acceleration buffer.
