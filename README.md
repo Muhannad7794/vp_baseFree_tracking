@@ -44,11 +44,13 @@ At the top level you should see something close to:
     └── piecewise_plots/
         ├── piecewise_model_scenarios/
         ├── piecewise_model_sigma_bars/
-        └── smoothing/   
+        └── smoothing/
 ```
 
 ### 1.1 Code files
+
 #### Architecture files:
+
 - **`Dockerfile`**
   Defines a minimal Python image with the dependencies needed to run the pipeline.
 
@@ -56,6 +58,7 @@ At the top level you should see something close to:
   Wraps the image into a service called `analysis`, mounts the `data/` folder from the host into the container, and sets the working directory and default command.
 
 #### Data processing and feature engineering files:
+
 - **`parser.py`**
   Parses raw Unreal Engine log or text files from `data/raw/`, extracts the lines produced by the logging blueprint, and writes a clean table to `data/processed/tracking_logs.csv`.
 
@@ -69,36 +72,41 @@ At the top level you should see something close to:
     It also provides plotting utilities for position / velocity / acceleration.
 
 #### Models and simulation files:
-  - ***Linear***:
-    - **`linear_sigma_model.py`**
-      Implements the sigma-based model:
 
-      - computes rolling standard deviation of acceleration (`sigma_*`),
-      - calibrates per-axis `min_sigma` / `max_sigma` from labelled scenarios,
-      - maps `sigma` → `InterpSpeed_*` with a linear inverse mapping,
-      - writes the extended table to `data/modeled/tracking_modelled_sigma.csv`,
-      - writes configuration to `data/config/linear_sigma_ranges.json`,
-      - includes plotting utilities for `sigma` and `InterpSpeed`.
+- **_Linear_**:
 
-    - **`linear_smoothing_sim.py`**
-      Replays a single take and axis and applies the same logic that will be used in Unreal:
+  - **`linear_sigma_model.py`**
+    Implements the sigma-based model:
 
-      - recomputes rolling `sigma` online,
-      - looks up model parameters from
-    - **`linear_sigma_ranges.json`**
-      - applies an FInterpTo-style smoothing step frame by frame,
-      - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
+    - computes rolling standard deviation of acceleration (`sigma_*`),
+    - calibrates per-axis `min_sigma` / `max_sigma` from labelled scenarios,
+    - maps `sigma` → `InterpSpeed_*` with a linear inverse mapping,
+    - writes the extended table to `data/modeled/tracking_modelled_sigma.csv`,
+    - writes configuration to `data/config/linear_sigma_ranges.json`,
+    - includes plotting utilities for `sigma` and `InterpSpeed`.
 
-  - ***Piecewise***:
-    - **`piecewise_sigma_model.py`**
-      - computes rolling σ per axis and calibrates
-      piecewise σ-breaks from the scenario groups *static / slow tripod / controlled handheld / medium / fast*.
-      - writes the extended table to `data/modeled/tracking_modelled_sigma_piecewise.csv`,
-      - writes configuration to `data/config/piecewise_sigma_ranges.json`.
+  - **`linear_smoothing_sim.py`**
+    Replays a single take and axis and applies the same logic that will be used in Unreal:
 
-    - **`piecewise_smoothing_sim.py`** – replays a single take using the
-      piecewise mapping, then plots raw vs smoothed motion, jitter reduction and lag.
-      Plots go to `data/piecewise_plots/smoothing/`.
+    - recomputes rolling `sigma` online,
+    - looks up model parameters from
+
+  - **`linear_sigma_ranges.json`**
+    - applies an FInterpTo-style smoothing step frame by frame,
+    - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
+
+- **_Piecewise_**:
+
+  - **`piecewise_sigma_model.py`**
+
+    - computes rolling σ per axis and calibrates
+      piecewise σ-breaks from the scenario groups _static / slow tripod / controlled handheld / medium / fast_.
+    - writes the extended table to `data/modeled/tracking_modelled_sigma_piecewise.csv`,
+    - writes configuration to `data/config/piecewise_sigma_ranges.json`.
+
+  - **`piecewise_smoothing_sim.py`** – replays a single take using the
+    piecewise mapping, then plots raw vs smoothed motion, jitter reduction and lag.
+    Plots go to `data/piecewise_plots/smoothing/`.
 
 ---
 
@@ -175,9 +183,11 @@ Running the full pipeline produces:
     }
   }
   ```
+
 - `data/config/piecewise_sigma_ranges.json`
 
   Per-axis configuration with piecewise σ-breaks and speed levels.
+
   ```json
   {
     "window_size": 25,
@@ -223,7 +233,7 @@ From the repo root:
 docker compose up --build -d
 
 # 2) Run the default pipeline inside the container
-docker compose run --rm analysis            
+docker compose run --rm analysis
 ```
 
 The default command (as set in `docker-compose.yml`) will typically execute a driver script or a sequence like:
@@ -231,16 +241,16 @@ The default command (as set in `docker-compose.yml`) will typically execute a dr
 ```bash
 python parser.py
 python kinematics.py
-python <model_script>.py
+python <model_script(s)>.py
 ```
 
 After this, the output should be:
 
 - `data/derived/tracking_derivatives.csv`
 - `data/modeled/tracking_modelled_sigma.csv`
-- `data/modeled/tracking_modelled_sigma_<any additional models>.csv`
+- `data/modeled/tracking_modelled_sigma_<any_additional_model(s)>.csv`
 - `data/config/linear_sigma_ranges.json`
-- `data/config/<any additional models>_sigma_ranges.json`
+- `data/config/<any_additional_model(s)>_sigma_ranges.json`
 
 If you only want to recompute derivatives or models, you can call each script directly with `docker compose run --rm analysis python ...` as shown below.
 
@@ -248,7 +258,8 @@ If you only want to recompute derivatives or models, you can call each script di
 
 ## 4. Command-line usage and plotting scenarios
 
-**kinematics.py** along with any  **<model>_sigma_model.py** scripts expose a CLI. This section shows some of the typical cases of using and utilizing the CLI to trigger the pipeline of the system, and generate different plots.
+The scripts **kinematics.py**, along with **linear_sigma_model.py** and **any_additional_model(s)\_sigma_model.py** all expose a custom CLI.
+This section shows some of the typical cases of using and utilizing the CLI to trigger the pipeline of the system, and generate different plots.
 
 ---
 
@@ -450,24 +461,27 @@ docker compose run --rm analysis \
     --plot-axis Y_rot
 ```
 
-
 Output example:
+
 - `data/piecewise_plots/piecewise_model_scenarios/controlled_handheld_pan_Y_rot_piecewise.jpg`
 - `data/piecewise_plots/piecewise_model_scenarios/fast_pan_tripod_Y_rot_piecewise.jpg`
 
-| controlled_handheld_pan – Y_rot                                                                       | fast_pan_tripod – Y_rot                                                               |
-| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| controlled_handheld_pan – Y_rot                                                                                              | fast_pan_tripod – Y_rot                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/piecewise_model_scenarios/controlled_handheld_pan_Y_rot_piecewise.jpg) | ![fast_pan_tripod_Y_rot](data/piecewise_plots/piecewise_model_scenarios/fast_pan_tripod_Y_rot_piecewise.jpg) |
 
 **What these graphs show**
+
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
 - The bottom subplot is the resulting **InterpSpeed** chosen by the piecewise model at each time.
 - For **controlled handheld pan**, σ stays moderate and InterpSpeed remains near the maximum, meaning the filter mostly follows the operator.
 - For **fast tripod pans**, σ spikes higher and InterpSpeed is periodically reduced, indicating stronger smoothing during high-instability segments.
-This demonstrates the adaptive mapping from local motion statistics to damping strength using a piecewise function.
+  This demonstrates the adaptive mapping from local motion statistics to damping strength using a piecewise function.
+
 ---
 
 ### 4.7 Sigma bar plots per axis (piecewise model)
+
 **Command**
 
 ```bash
@@ -480,22 +494,26 @@ docker compose run --rm analysis \
 ```
 
 Output example:
+
 - `data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_pose_piecewise.jpg`
 - `data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_rot_piecewise.jpg`
 
-| σ (90th percentile) – Z_pose                                                 | σ (90th percentile) – Z_rot                                                |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| σ (90th percentile) – Z_pose                                                                        | σ (90th percentile) – Z_rot                                                                       |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | ![sigma_bar_Z_pose](data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_pose_piecewise.jpg) | ![sigma_bar_Z_rot](data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_rot_piecewise.jpg) |
 
 **What these graphs show**
+
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
 - Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
 - On Z_pose, only a subset of scenarios produces high σ, reflecting when there is significant depth or vertical movement.
 - On Z_rot, aggressive rotational moves show very large σ, clearly separated from static scenarios.
-These bar plots justify the choice of σ-breaks and speed levels per axis and illustrate how σ scales with motion complexity.
+  These bar plots justify the choice of σ-breaks and speed levels per axis and illustrate how σ scales with motion complexity.
+
 ---
 
 ### 4.8 Smoothing simulation (piecewise model) (raw vs smoothed motion, jitter, lag)
+
 **Command**
 
 ```bash
@@ -509,16 +527,17 @@ docker compose run --rm analysis\
 ```
 
 Output example:
+
 - `data/piecewise_plots/smoothing/fast_pan_tripod_02_Y_rot_piecewise.jpg`
 - `data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg`
 
-| fast_pan_tripod_02 – Y_rot                                                     | controlled_handheld_pan_03 – Y_rot                                                      |
-| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| fast_pan_tripod_02 – Y_rot                                                                         | controlled_handheld_pan_03 – Y_rot                                                                                 |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | ![fast_pan_tripod_02_Y_rot](data/piecewise_plots/smoothing/fast_pan_tripod_02_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_03_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) |
-
 
 **What these graphs show**
 Each figure has three parts:
+
 1. **Raw vs smoothed motion over time**
    - The orange smoothed curve follows the blue raw curve but removes high-frequency oscillations.
 2. **Jitter metric before and after**
@@ -527,32 +546,38 @@ Each figure has three parts:
 3. **Difference and lag estimate**
    - The bottom plot shows `smoothed - raw` over time, with an estimated lag in ms.
    - Fast tilt exhibits more jitter reduction and a small lag (~100 ms); fast pan shows less change and almost zero lag.
-These simulations validate that the piecewise algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
+     These simulations validate that the piecewise algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
+
 ---
 
+## **This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
 
-**This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
----
+### 4.9 Linear Sommthing VS Piecewise Smoothing
 
-
-## 4.9 Linear Sommthing VS Piecewise Smoothing**
-| Linear Smoothing – controlled_handheld_pan_Y_rot                                                     | Piecewise Smoothing – controlled_handheld_pan_Y_rot                                                      |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| ![linear_controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![piecewise_controlled_handheld_pan_Y_rot]( data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) |
+| Linear Smoothing – controlled_handheld_pan_Y_rot                                                   | Piecewise Smoothing – controlled_handheld_pan_Y_rot                                                                       |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ![linear_controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![piecewise_controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) |
 
 **What these graphs show**
 
 - ### Linear Model:
-  - The linear mapping is conservative. It reduces jitter a bit but is clearly prioritising “don’t touch the motion too much”.
-  - The model is a good "safe default". It does not affect the signal much. Applies small corrections when the motion is very jittery. Very useful when maximum responsiveness is desired, with a tiny bit of smoothing.
+
+  - The linear mapping is conservative. It reduces jitter a bit, but it is clearly prioritising responsiveness by remaining very close to the raw signal.
+  - The model is a good "safe default". It does not affect the signal much. It applies small corrections when the motion is very jittery. Otherwise, it remains very close to the raw signal.
+  - This makes the model very useful in certain use cases, where simple jitter reduction is desired, while responsiveness is of highest priority.
 
 - ### Piecewise Model:
-  - The piecewise mapping is more aggressive on this sequence: it removes a lot more high-frequency energy while still keeping the signal aligned in time.
-  - The model is a "strong stabilizer". It applies larger level of smoothness, and is more sensitive to jitter variations, thanks to the multiple breakpoints.
 
-  - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline. The piecewise model allows for more tuning when needed.
-  - The difference between those models will be most visible in the mid range motion scenarios. This comes as a result of the multiple breakpoints implemented in the piecewise model.
-  - On the other hand, both models will behave similarly on the extreme scenarios (very static or very fast motion).
+  - The piecewise mapping is more aggressive generally -as shown in this sequence- It removes more high-frequency energy while still keeping the signal aligned in time.
+  - The model is a "strong stabilizer". It applies larger level of smoothness, and is more sensitive to jitter variations, thanks to the multiple breakpoints.
+  - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
+
+- ### Comparitive Analysis:
+  - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
+  - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potental latency trade-offs in certain scenarios.
+  - The difference between the models from the last example will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jutter levels in those mid-range scenarios.
+  - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
+
 ---
 
 ## 5. Modularity and scalability
@@ -566,15 +591,19 @@ This project is structured so that individual components can be replaced or exte
   `kinematics.py` centralises time-based derivatives. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
 
 - **Models**
-  `linear_sigma_model.py` implements a single, interpretable baseline. More advanced models (piecewise linear, non-linear functions, learned regressors) can be implemented as new scripts that read `tracking_derivatives.csv` and write their own configuration and modelled CSVs.
+
+  - `linear_sigma_model.py` implements a single, interpretable baseline.
+    `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mappings strategies based on their sigma breakpoints and speed ranges.
+  - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
 
 - **Runtime implementation**
-  The logic demonstrated in  any `*_smoothing_sim.py` maps directly to an Unreal Engine implementation:
-
-  - Maintain a per-axis acceleration buffer.
-  - Compute rolling σ with a fixed window size.
-  - Map σ to InterpSpeed using pre-computed bounds.
-  - Apply FInterpTo each frame.
+  - The logic demonstrated in `<any_additional_model(s)>_smoothing_sim.py` maps directly to an Unreal Engine implementation.
+  - The flexibility offered by the system to create different models allow for different runtime implementations within Unreal Engine to be tested and compared easily.
+  - All different runtime implementations will apply their own smoothing logic, while adhering to the same overall principles:
+    - Maintain a per-axis acceleration buffer.
+    - Compute rolling σ with a fixed window size.
+    - Map σ to InterpSpeed using pre-computed bounds.
+    - Apply FInterpTo each frame.
 
 ---
 
@@ -582,7 +611,7 @@ This project is structured so that individual components can be replaced or exte
 
 To reproduce the core results:
 
-1. Provide a `data/processed/tracking_logs.csv` with the schema described in §2.
+1. Provide or generate a `data/processed/tracking_logs.csv` with the schema described in §2.
 
 2. Run the pipeline inside Docker:
 
@@ -591,6 +620,6 @@ To reproduce the core results:
    docker compose run --rm analysis
    ```
 
-3. Generate any of the example plots using the CLI commands in §4.
+3. Generate any of the example plots using the CLI commands as shown in §4.
 
-The combination of structured dataset, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability and more models.
+The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability.
