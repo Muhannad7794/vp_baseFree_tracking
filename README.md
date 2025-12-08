@@ -25,16 +25,22 @@ At the top level you should see something close to:
 ├── linear_smoothing_sim.py               # offline simulation using linear model
 ├── piecewise_sigma_model.py       # rolling σ + piecewise inverse mapping per axis
 ├── piecewise_smoothing_sim.py     # offline simulation using piecewise model
+├── sigmoid_sigma_model.py         # rolling σ + sigmoid inverse mapping per axis
+├── sigmoid_smoothing_sim.py       # offline simulation using sigmoid model
 ├── README.md
 ├── scripts/        # Different bash scripts to run different models as separate services
 └── data/             # (not versioned)
     ├── raw/          # Unreal log files or text exports
     ├── processed/    # tracking_logs.csv
     ├── derived/      # tracking_derivatives.csv
-    ├── modeled/      # tracking_modelled_sigma.csv
-    ├── config/       # linear_sigma_ranges.json
+    ├── modeled/      # contains modelled CSVs per model
+    │   └── tracking_modelled_sigma.csv
+    │   └── tracking_modelled_sigma_piecewise.csv
+    │   └── tracking_modelled_sigma_sigmoid.csv
+    ├── config/       # configuration JSONs per model
     │   └── linear_sigma_ranges.json    # σ ranges + speed bounds per axis (linear)
     │   └── piecewise_sigma_ranges.json # σ breaks + speed levels per axis (piecewise)
+    │   └── sigmoid_sigma_ranges.json   # σ inflection + speed bounds per axis (sigmoid)
     └── plots/
         ├── kinematics/
         ├── kinematics_scenarios/
@@ -44,6 +50,10 @@ At the top level you should see something close to:
     └── piecewise_plots/
         ├── piecewise_model_scenarios/
         ├── piecewise_model_sigma_bars/
+        └── smoothing/
+    └── sigmoid_plots/
+        ├── sigmoid_model_scenarios/
+        ├── sigmoid_model_sigma_bars/
         └── smoothing/
 ```
 
@@ -107,6 +117,18 @@ At the top level you should see something close to:
   - **`piecewise_smoothing_sim.py`** – replays a single take using the
     piecewise mapping, then plots raw vs smoothed motion, jitter reduction and lag.
     Plots go to `data/piecewise_plots/smoothing/`.
+
+- **_Sigmoid_**:
+  - **`sigmoid_sigma_model.py`**
+
+    - computes rolling σ per axis and calibrates
+      sigmoid inflection points from the scenario groups _static / slow tripod / controlled handheld / medium / fast_.
+    - writes the extended table to `data/modeled/tracking_modelled_sigma_sigmoid.csv`,
+    - writes configuration to `data/config/sigmoid_sigma_ranges.json`.
+
+  - **`sigmoid_smoothing_sim.py`** – replays a single take using the
+    sigmoid mapping, then plots raw vs smoothed motion, jitter reduction and lag.
+    Plots go to `data/sigmoid_plots/smoothing/`.
 
 ---
 
@@ -211,7 +233,25 @@ Running the full pipeline produces:
     }
   }
   ```
+- `data/config/sigmoid_sigma_ranges.json`
+  Per-axis configuration with sigmoid inflection points and speed bounds.
 
+  ```json
+  {
+    "window_size": 25,
+    "axes": {
+      "X_pose": {
+        "min_sigma": ...,
+        "max_sigma": ...,
+        "min_speed": ...,
+        "max_speed": ...,
+        "midpoint": ...,
+        "steepness": ...
+      },
+      ...
+    }
+  }
+  ```
 ---
 
 ## 3. Getting it to run on another machine
@@ -233,7 +273,7 @@ From the repo root:
 docker compose up --build -d
 
 # 2) Run the default pipeline inside the container
-docker compose run --rm analysis
+docker compose run --rm linear (or sigmoid / piecewise/ <any_additional_model(s)>)
 ```
 
 The default command (as set in `docker-compose.yml`) will typically execute a driver script or a sequence like:
@@ -252,7 +292,7 @@ After this, the output should be:
 - `data/config/linear_sigma_ranges.json`
 - `data/config/<any_additional_model(s)>_sigma_ranges.json`
 
-If you only want to recompute derivatives or models, you can call each script directly with `docker compose run --rm analysis python ...` as shown below.
+If you only want to recompute derivatives or models, you can call each script directly with `docker compose run --rm <service> python ...` as shown below.
 
 ---
 
@@ -270,7 +310,7 @@ _(Position / velocity / acceleration for one take and axis)_
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm linear \
   python kinematics.py \
     --input data/processed/tracking_logs.csv \
     --output data/derived/tracking_derivatives.csv \
@@ -304,7 +344,7 @@ _(Position / velocity / acceleration, all takes overlaid for one scenario)_
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm linear \
   python kinematics.py \
     --input data/processed/tracking_logs.csv \
     --output data/derived/tracking_derivatives.csv \
@@ -338,7 +378,7 @@ _(Rolling σ and corresponding adaptive interpolation speed)_
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm linear \
   python linear_sigma_model.py \
     --input data/derived/tracking_derivatives.csv \
     --output data/modeled/tracking_modelled_sigma.csv \
@@ -374,7 +414,7 @@ _(90th percentile σ per scenario, one axis)_
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm linear \
   python linear_sigma_model.py \
     --input data/derived/tracking_derivatives.csv \
     --output data/modeled/tracking_modelled_sigma.csv \
@@ -407,7 +447,7 @@ These bar plots justify the choice of `min_sigma` and `max_sigma` per axis and i
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm linear \
   python linear_smoothing_sim.py \
     --logs data/processed/tracking_logs.csv \
     --derived data/derived/tracking_derivatives.csv \
@@ -452,7 +492,7 @@ These simulations validate that the algorithm behaves as intended: it damps nois
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm piecewise \
   python piecewise_sigma_model.py \
     --input data/derived/tracking_derivatives.csv \
     --output data/modeled/tracking_modelled_sigma.csv \
@@ -485,7 +525,7 @@ Output example:
 **Command**
 
 ```bash
-docker compose run --rm analysis \
+docker compose run --rm piecewise \
   python piecewise_sigma_model.py \
     --input data/derived/tracking_derivatives.csv \
     --output data/modeled/tracking_modelled_sigma_piecewise.csv \
@@ -517,7 +557,7 @@ Output example:
 **Command**
 
 ```bash
-docker compose run --rm analysis\
+docker compose run --rm piecewise\
    python piecewise_smoothing_sim.py\
         --logs data/processed/tracking_logs.csv\
         --derivatives data/derived/tracking_derivatives.csv\
@@ -550,13 +590,102 @@ Each figure has three parts:
 
 ---
 
+### 4.9 Sigma and InterpSpeed per scenario (sigmoid model)
+**Command**
+
+```bash
+docker compose run --rm sigmoid \
+  python sigmoid_sigma_model.py \
+    --input data/derived/tracking_derivatives.csv \
+    --output data/modeled/tracking_modelled_sigma_sigmoid.csv \
+    --config-output data/config/sigmoid_sigma_ranges.json \
+    --plot-scenario fast_pan_tripod \
+    --plot-axis Y_rot
+```
+Output example:
+- `data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot_sigmoid.jpg`
+- `data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot_sigmoid.jpg`
+
+| controlled_handheld_pan – Y_rot                                                                                              | fast_pan_tripod – Y_rot                                                                                      |
+| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot_sigmoid.jpg) | ![fast_pan_tripod_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot_sigmoid.jpg) |
+
+**What these graphs show**
+- The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
+- The bottom subplot is the resulting **InterpSpeed** chosen by the sigmoid model at each time.
+- For **controlled handheld pan**, σ stays moderate and InterpSpeed remains near the maximum, meaning the filter mostly follows the operator.
+- For **fast tripod pans**, σ spikes higher and InterpSpeed is periodically reduced, indicating stronger smoothing during high-instability segments.
+  This demonstrates the adaptive mapping from local motion statistics to damping strength using a sigmoid function.
+---
+
+### 4.10 Sigma bar plots per axis (sigmoid model)
+**Command** 
+
+```bash
+docker compose run --rm sigmoid \
+  python sigmoid_sigma_model.py \
+    --input data/derived/tracking_derivatives.csv \
+    --output data/modeled/tracking_modelled_sigma_sigmoid.csv \
+    --config-output data/config/sigmoid_sigma_ranges.json \
+    --plot-bar-axis Z_pose
+```
+Output example:
+- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose_sigmoid.jpg`
+- `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot_sigmoid.jpg`
+
+| σ (90th percentile) – Z_pose                                                                        | σ (90th percentile) – Z_rot                                                                       |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| ![sigma_bar_Z_pose](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose_sigmoid.jpg) | ![sigma_bar_Z_rot](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot_sigmoid.jpg) |
+
+**What these graphs show**
+- Each bar represents the **90th percentile of σ** for one scenario on a given axis.
+- Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
+- On Z_pose, only a subset of scenarios produces high σ, reflecting when there is significant depth or vertical movement.
+- On Z_rot, aggressive rotational moves show very large σ, clearly separated from static scenarios.
+  These bar plots justify the choice of sigmoid inflection points and speed bounds per axis and illustrate how σ scales with motion complexity.
+---
+
+### 4.11 Smoothing simulation (sigmoid model) (raw vs smoothed motion, jitter, lag)
+
+**Command**
+```bash
+docker compose run --rm sigmoid\
+   python sigmoid_smoothing_sim.py\
+        --logs data/processed/tracking_logs.csv\
+        --derivatives data/derived/tracking_derivatives.csv\
+        --config data/config/sigmoid_sigma_ranges.json\
+        --axis Y_rot\
+        --label fast_pan_tripod_02
+```
+
+Output example:
+- `data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg`
+- `data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg`
+
+| fast_pan_tripod_02 – Y_rot                                                                         | controlled_handheld_pan_03 – Y_rot                                                                                 |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| ![fast_pan_tripod_02_Y_rot](data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg) | ![controlled_handheld_pan_03_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
+
+**What these graphs show**
+Each figure has three parts:
+1. **Raw vs smoothed motion over time**
+   - The orange smoothed curve follows the blue raw curve but removes high-frequency oscillations.
+2. **Jitter metric before and after**
+   - Bars show the RMS of frame-to-frame differences.
+   - A lower value after smoothing indicates reduced jitter; in fast tilt, jitter drops significantly.
+3. **Difference and lag estimate**
+   - The bottom plot shows `smoothed - raw` over time, with an estimated lag in ms.
+   - Fast tilt exhibits more jitter reduction and a small lag (~100 ms); fast pan shows less change and almost zero lag.
+     These simulations validate that the sigmoid algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
+--- 
+
 ## **This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
 
-### 4.9 Linear Sommthing VS Piecewise Smoothing
+### 4.12 Linear Sommthing VS Piecewise Smoothing VS Sigmoid Smoothing Comparison
 
-| Linear Smoothing – controlled_handheld_pan_Y_rot                                                   | Piecewise Smoothing – controlled_handheld_pan_Y_rot                                                                       |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| ![linear_controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![piecewise_controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) |
+| Linear Model – controlled_handheld_pan – Y_rot                                                   | Piecewise Model – controlled_handheld_pan – Y_rot                                                     | Sigmoid Model – controlled_handheld_pan – Y_rot                                                     |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg)               | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg)               |
 
 **What these graphs show**
 
@@ -572,11 +701,18 @@ Each figure has three parts:
   - The model is a "strong stabilizer". It applies larger level of smoothness, and is more sensitive to jitter variations, thanks to the multiple breakpoints.
   - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
 
+- ### Sigmoid Model:
+  - The sigmoid mapping is somewhere in between the linear and piecewise models. It removes a noticeable amount of jitter, while still keeping the signal aligned in time.
+  - The model is a "balanced stabilizer". It applies moderate levels of smoothness, and is more sensitive to jitter variations, thanks to the sigmoid curve.
+  - The lag produced by the model is also essentially the same as the linear and piecewise models. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
+
 - ### Comparitive Analysis:
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
   - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
-  - The difference between the models from the last example will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
+  - The difference between the linear and the piecewise models will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
+  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a balance between jitter reduction and responsiveness is desired.
+  - Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
 
 ---
 
@@ -617,9 +753,9 @@ To reproduce the core results:
 
    ```bash
    docker compose build
-   docker compose run --rm analysis
+   docker compose run --rm linear
    ```
 
 3. Generate any of the example plots using the CLI commands as shown in §4.
 
-The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability.
+The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability when testing with adding new models or datasets.
