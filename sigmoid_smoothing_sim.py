@@ -1,14 +1,13 @@
-# linear_smoothing_sim.py
+# sigmoid_smoothing_sim.py
 #
-# Offline simulation of the adaptive smoothing algorithm.
+# Offline simulation of the adaptive smoothing algorithm using the SIGMOID model.
 # - Reads raw tracking logs + kinematic derivatives
-# - Reads linear_sigma_ranges.json for per-axis parameters
-# - Replays one take (label) and applies the same logic we'll use in UE:
+# - Reads sigmoid_sigma_ranges.json for per-axis parameters (including steepness/midpoint)
+# - Replays one take (label) and applies the sigmoid logic:
 #     * rolling σ on acceleration over N frames
-#     * linear inverse mapping σ -> InterpSpeed
+#     * sigmoid inverse mapping σ -> InterpSpeed
 #     * FInterpTo-style smoothing
-# - Saves JPG plots comparing raw vs smoothed motion,
-#   jitter (high-frequency energy) before/after, and reports lag.
+# - Saves JPG plots comparing raw vs smoothed motion.
 
 import os
 import json
@@ -89,7 +88,7 @@ def run_simulation_for_axis(
     axis: str,
 ) -> Dict[str, np.ndarray]:
     """
-    Core simulation loop for a single label & axis.
+    Core simulation loop for a single label & axis (Sigmoid Version).
 
     Returns a dict with:
       time, raw, smooth, sigma, speed, dt
@@ -102,10 +101,16 @@ def run_simulation_for_axis(
 
     axis_cfg = cfg["axes"][axis]
     window = int(cfg.get("window", 25))
+
+    # Load ranges and sigmoid params
     min_sigma = float(axis_cfg["min_sigma"])
     max_sigma = float(axis_cfg["max_sigma"])
     min_speed = float(axis_cfg["min_speed"])
     max_speed = float(axis_cfg["max_speed"])
+
+    # These should be present if sigmoid_sigma_model.py generated the config
+    midpoint = float(axis_cfg.get("midpoint", (min_sigma + max_sigma) / 2.0))
+    steepness = float(axis_cfg.get("steepness", 0.1))
 
     # Extract this label from both raw and derivatives, sort by time
     raw = logs_df[logs_df["label"] == label].sort_values("time")
@@ -158,18 +163,21 @@ def run_simulation_for_axis(
         else:
             sigma = np.nan
 
-        # Map σ -> InterpSpeed using same linear inverse mapping as in linear_sigma_model
+        # --- SIGMOID MAPPING LOGIC START ---
         if np.isnan(sigma):
             # Before we have enough history, treat as very stable
             speed = max_speed
         else:
-            sigma_clamped = max(min_sigma, min(max_sigma, sigma))
-            if np.isclose(max_sigma, min_sigma):
-                speed = 0.5 * (min_speed + max_speed)
-            else:
-                speed = max_speed + (min_speed - max_speed) * (
-                    (sigma_clamped - min_sigma) / (max_sigma - min_sigma)
-                )
+            # 1. Calculate standard logistic curve (low to high)
+            # Higher sigma -> Higher result (approaching 1.0)
+            logistic_curve = 1 / (1 + np.exp(-steepness * (sigma - midpoint)))
+
+            # 2. Invert mapping
+            # We want: Low Sigma (stable) -> High Speed (MaxSpeed)
+            #          High Sigma (jitter) -> Low Speed (MinSpeed)
+            # So: Speed = Min + (Range * (1 - logistic))
+            speed = min_speed + (max_speed - min_speed) * (1 - logistic_curve)
+        # --- SIGMOID MAPPING LOGIC END ---
 
         current = f_interp_to(current, pose[i], dt[i], speed)
 
@@ -191,8 +199,6 @@ def jitter_metric(series: np.ndarray, dt: np.ndarray) -> float:
     """
     Simple "jitter" / high-frequency energy metric:
       RMS of first difference per unit time.
-
-    Larger value => more high-frequency motion.
     """
     if len(series) < 2:
         return 0.0
@@ -226,7 +232,7 @@ def make_plots(
     label: str,
     axis: str,
     sim: Dict[str, np.ndarray],
-    output_dir: str = "data/plots/smoothing",
+    output_dir: str = "data/sigmoid_plots/smoothing",
 ) -> None:
     """
     Create JPG plots showing:
@@ -235,7 +241,7 @@ def make_plots(
       - difference over time, annotated with lag
     """
     os.makedirs(output_dir, exist_ok=True)
-    out_path = os.path.join(output_dir, f"{label}_{axis}.jpg")
+    out_path = os.path.join(output_dir, f"{label}_{axis}_sigmoid.jpg")
 
     t = sim["time"]
     dt = sim["dt"]
@@ -253,10 +259,10 @@ def make_plots(
 
     # 1) Raw vs smoothed motion
     ax1 = plt.subplot(3, 1, 1)
-    ax1.plot(t, raw, label="raw", linewidth=1)
-    ax1.plot(t, smooth, label="smoothed", linewidth=1)
+    ax1.plot(t, raw, label="raw", linewidth=1, alpha=0.7)
+    ax1.plot(t, smooth, label="smoothed (sigmoid)", linewidth=1)
     ax1.set_ylabel(axis)
-    ax1.set_title(f"{label} – {axis}: raw vs smoothed")
+    ax1.set_title(f"{label} – {axis}: raw vs smoothed (Sigmoid Model)")
     ax1.legend()
 
     # 2) Jitter metric bar plot
@@ -295,7 +301,7 @@ def make_plots(
     plt.close()
 
     print(
-        f"[smoothing_sim] Saved comparison plot to {out_path}\n"
+        f"[sigmoid_smoothing_sim] Saved comparison plot to {out_path}\n"
         f"  Jitter raw     : {jitter_raw:.4f}\n"
         f"  Jitter smoothed: {jitter_smooth:.4f}\n"
         f"  Reduction      : {jitter_reduction:.2f}x\n"
@@ -306,7 +312,7 @@ def make_plots(
 def main():
     parser = argparse.ArgumentParser(
         description=(
-            "Simulate adaptive smoothing using linear sigma model "
+            "Simulate adaptive smoothing using SIGMOID sigma model "
             "and visualise raw vs smoothed motion."
         )
     )
@@ -325,8 +331,8 @@ def main():
     parser.add_argument(
         "--config",
         type=str,
-        default="data/config/linear_sigma_ranges.json",
-        help="Path to linear_sigma_ranges.json",
+        default="data/config/sigmoid_sigma_ranges.json",
+        help="Path to sigmoid_sigma_ranges.json",
     )
     parser.add_argument(
         "--axis",
@@ -352,7 +358,7 @@ def main():
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="data/plots/smoothing",
+        default="data/sigmoid_plots/smoothing",
         help="Directory to save JPG plots",
     )
 
@@ -365,7 +371,9 @@ def main():
     label = select_label(
         logs_df, label=args.label, scenario=args.scenario, take=args.take
     )
-    print(f"[smoothing_sim] Running simulation for label='{label}', axis='{args.axis}'")
+    print(
+        f"[sigmoid_smoothing_sim] Running simulation for label='{label}', axis='{args.axis}'"
+    )
 
     sim = run_simulation_for_axis(logs_df, drv_df, cfg, label, args.axis)
 
