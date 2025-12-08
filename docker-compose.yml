@@ -1,7 +1,7 @@
 services:
-  analysis:
+  linear:
     build: .
-    container_name: tracking-analysis
+    container_name: tracking-linear
     working_dir: /vp_basefree_tracking_dockerized
     volumes:
       # Mount local data folder into the container
