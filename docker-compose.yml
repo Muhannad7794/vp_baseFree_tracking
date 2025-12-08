@@ -18,3 +18,11 @@ services:
       - ./data:/vp_basefree_tracking_dockerized/data
 
     command: ["bash", "scripts/run_piecewise.sh"]
+
+  sigmoid:
+    build: .
+    container_name: tracking-sigmoid
+    working_dir: /vp_basefree_tracking_dockerized
+    volumes:
+      - ./data:/vp_basefree_tracking_dockerized/data
+    command: ["python", "sigmoid_sigma_model.py"]
