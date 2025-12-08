@@ -25,4 +25,4 @@ services:
     working_dir: /vp_basefree_tracking_dockerized
     volumes:
       - ./data:/vp_basefree_tracking_dockerized/data
-    command: ["python", "sigmoid_sigma_model.py"]
+    command: ["bash", "scripts/run_sigmoid.sh"]
