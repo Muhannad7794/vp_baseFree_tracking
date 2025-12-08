@@ -667,7 +667,7 @@ Output example:
 | ![fast_pan_tripod_02_Y_rot](data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg) | ![controlled_handheld_pan_03_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
 
 **What these graphs show**
-Each figure has three parts:
+- Each figure has three parts:
 1. **Raw vs smoothed motion over time**
    - The orange smoothed curve follows the blue raw curve but removes high-frequency oscillations.
 2. **Jitter metric before and after**
@@ -675,8 +675,8 @@ Each figure has three parts:
    - A lower value after smoothing indicates reduced jitter; in fast tilt, jitter drops significantly.
 3. **Difference and lag estimate**
    - The bottom plot shows `smoothed - raw` over time, with an estimated lag in ms.
-   - Fast tilt exhibits more jitter reduction and a small lag (~100 ms); fast pan shows less change and almost zero lag.
-     These simulations validate that the sigmoid algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
+   - Fast tilt exhibits more jitter reduction and a small lag (~ 0.0 ms); fast pan shows less change as this level of speed is classified as intentional.
+   - These simulations validate that the sigmoid algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
 --- 
 
 ## **This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
@@ -702,17 +702,28 @@ Each figure has three parts:
   - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
 
 - ### Sigmoid Model:
-  - The sigmoid mapping is somewhere in between the linear and piecewise models. It removes a noticeable amount of jitter, while still keeping the signal aligned in time.
-  - The model is a "balanced stabilizer". It applies moderate levels of smoothness, and is more sensitive to jitter variations, thanks to the sigmoid curve.
-  - The lag produced by the model is also essentially the same as the linear and piecewise models. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
+  - The sigmoid mapping is somewhere in between the linear and piecewise models. It is the none liener model among the three.
+  - It sits -both conceptually and in practice- between the linear and piecewise models.
+  - like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the steps between those two ends is non-linear, following a sigmoid curve.
+  - Unlike the piecewise model, i does not have multiple breakpoints, but rather a smooth transition between the two ends of the range, due to its nonlinear nature.
+  - The model is a "balanced stabilizer". It applies moderate levels of smoothness, and steps gradually between jitter variations, thanks to the sigmoid curve.
+  - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
 
 - ### Comparitive Analysis:
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
+
   - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
+
   - The difference between the linear and the piecewise models will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
+
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
-  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a balance between jitter reduction and responsiveness is desired.
-  - Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
+
+  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a gradual transition between jitter reduction and responsiveness is desired. In this current three-model setup,
+  - The linear model can be seen as the Safe/Basic Control "Basic Mode",
+  - The piecewise model as the manual/specific Control (Expert Mode),
+  - And the sigmoid model as the Organic/Automated Control "Smart Mode". 
+
+  Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
 
 ---
 
