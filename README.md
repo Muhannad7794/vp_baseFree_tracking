@@ -575,7 +575,7 @@ Each figure has three parts:
 - ### Comparitive Analysis:
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
   - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potental latency trade-offs in certain scenarios.
-  - The difference between the models from the last example will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jutter levels in those mid-range scenarios.
+  - The difference between the models from the last example will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
 
 ---
