@@ -705,7 +705,7 @@ Output example:
   - The sigmoid mapping is somewhere in between the linear and piecewise models. It is the none liener model among the three.
   - It sits -both conceptually and in practice- between the linear and piecewise models.
   - like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the steps between those two ends is non-linear, following a sigmoid curve.
-  - Unlike the piecewise model, i does not have multiple breakpoints, but rather a smooth transition between the two ends of the range, due to its nonlinear nature.
+  - Unlike the piecewise model, it does not have multiple breakpoints, but rather a smooth transition between the two ends of the range, due to its nonlinear nature.
   - The model is a "balanced stabilizer". It applies moderate levels of smoothness, and steps gradually between jitter variations, thanks to the sigmoid curve.
   - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
 
@@ -718,10 +718,11 @@ Output example:
 
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
 
-  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a gradual transition between jitter reduction and responsiveness is desired. In this current three-model setup,
-  - The linear model can be seen as the Safe/Basic Control "Basic Mode",
+  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a gradual transition between jitter reduction and responsiveness is desired.
+  In this current three-model setup,
+  - The linear model can be seen as the Safe/Basic Control (Basic Mode),
   - The piecewise model as the manual/specific Control (Expert Mode),
-  - And the sigmoid model as the Organic/Automated Control "Smart Mode". 
+  - And the sigmoid model as the Organic/Automated Control (Smart Mode). 
 
   Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
 
@@ -764,7 +765,7 @@ To reproduce the core results:
 
    ```bash
    docker compose build
-   docker compose run --rm linear
+   docker compose run --rm linear   # or any other model/service
    ```
 
 3. Generate any of the example plots using the CLI commands as shown in §4.
