@@ -26,3 +26,11 @@ services:
     volumes:
       - ./data:/vp_basefree_tracking_dockerized/data
     command: ["bash", "scripts/run_sigmoid.sh"]
+
+  validation:
+    build: .
+    container_name: tracking-validation
+    working_dir: /vp_basefree_tracking_dockerized
+    volumes:
+      - ./data:/vp_basefree_tracking_dockerized/data
+    command: ["bash", "scripts/run_validation.sh"]

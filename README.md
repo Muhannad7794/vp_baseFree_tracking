@@ -55,6 +55,10 @@ At the top level you should see something close to:
         ├── sigmoid_model_scenarios/
         ├── sigmoid_model_sigma_bars/
         └── smoothing/
+    ├── validation/
+        ├── raw/           # raw .log files from UE runtime
+        ├── processed/     # parsed csv files from the test raw logs
+        └── plots/         # validation plots
 ```
 
 ### 1.1 Code files
@@ -119,6 +123,7 @@ At the top level you should see something close to:
     Plots go to `data/piecewise_plots/smoothing/`.
 
 - **_Sigmoid_**:
+
   - **`sigmoid_sigma_model.py`**
 
     - computes rolling σ per axis and calibrates
@@ -233,6 +238,7 @@ Running the full pipeline produces:
     }
   }
   ```
+
 - `data/config/sigmoid_sigma_ranges.json`
   Per-axis configuration with sigmoid inflection points and speed bounds.
 
@@ -252,6 +258,7 @@ Running the full pipeline produces:
     }
   }
   ```
+
 ---
 
 ## 3. Getting it to run on another machine
@@ -591,6 +598,7 @@ Each figure has three parts:
 ---
 
 ### 4.9 Sigma and InterpSpeed per scenario (sigmoid model)
+
 **Command**
 
 ```bash
@@ -602,24 +610,29 @@ docker compose run --rm sigmoid \
     --plot-scenario fast_pan_tripod \
     --plot-axis Y_rot
 ```
+
 Output example:
+
 - `data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot.jpg`
 - `data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot.jpg`
 
-| controlled_handheld_pan – Y_rot                                                                                              | fast_pan_tripod – Y_rot                                                                                      |
-| ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| controlled_handheld_pan – Y_rot                                                                                | fast_pan_tripod – Y_rot                                                                        |
+| -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot.jpg) | ![fast_pan_tripod_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot.jpg) |
 
 **What these graphs show**
+
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
 - The bottom subplot is the resulting **InterpSpeed** chosen by the sigmoid model at each time.
 - For **controlled handheld pan**, σ stays moderate and InterpSpeed remains near the maximum, meaning the filter mostly follows the operator.
 - For **fast tripod pans**, σ spikes higher and InterpSpeed is periodically reduced, indicating stronger smoothing during high-instability segments.
   This demonstrates the adaptive mapping from local motion statistics to damping strength using a sigmoid function.
+
 ---
 
 ### 4.10 Sigma bar plots per axis (sigmoid model)
-**Command** 
+
+**Command**
 
 ```bash
 docker compose run --rm sigmoid \
@@ -629,25 +642,30 @@ docker compose run --rm sigmoid \
     --config-output data/config/sigmoid_sigma_ranges.json \
     --plot-bar-axis Z_pose
 ```
+
 Output example:
+
 - `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose.jpg`
 - `data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot.jpg`
 
-| σ (90th percentile) – Z_pose                                                                        | σ (90th percentile) – Z_rot                                                                       |
-| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| σ (90th percentile) – Z_pose                                                          | σ (90th percentile) – Z_rot                                                         |
+| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | ![sigma_bar_Z_pose](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose.jpg) | ![sigma_bar_Z_rot](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot.jpg) |
 
 **What these graphs show**
+
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
 - Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
 - On Z_pose, only a subset of scenarios produces high σ, reflecting when there is significant depth or vertical movement.
 - On Z_rot, aggressive rotational moves show very large σ, clearly separated from static scenarios.
   These bar plots justify the choice of sigmoid inflection points and speed bounds per axis and illustrate how σ scales with motion complexity.
+
 ---
 
 ### 4.11 Smoothing simulation (sigmoid model) (raw vs smoothed motion, jitter, lag)
 
 **Command**
+
 ```bash
 docker compose run --rm sigmoid\
    python sigmoid_smoothing_sim.py\
@@ -659,15 +677,18 @@ docker compose run --rm sigmoid\
 ```
 
 Output example:
+
 - `data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg`
 - `data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg`
 
-| fast_pan_tripod_02 – Y_rot                                                                         | controlled_handheld_pan_03 – Y_rot                                                                                 |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| fast_pan_tripod_02 – Y_rot                                                                     | controlled_handheld_pan_03 – Y_rot                                                                             |
+| ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | ![fast_pan_tripod_02_Y_rot](data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg) | ![controlled_handheld_pan_03_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
 
 **What these graphs show**
+
 - Each figure has three parts:
+
 1. **Raw vs smoothed motion over time**
    - The orange smoothed curve follows the blue raw curve but removes high-frequency oscillations.
 2. **Jitter metric before and after**
@@ -677,15 +698,16 @@ Output example:
    - The bottom plot shows `smoothed - raw` over time, with an estimated lag in ms.
    - Fast tilt exhibits more jitter reduction and a small lag (~ 0.0 ms); fast pan shows less change as this level of speed is classified as intentional.
    - These simulations validate that the sigmoid algorithm behaves as intended: it damps noisy, aggressive motion more strongly while preserving responsiveness where motion is already smooth.
---- 
+
+---
 
 ## **This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
 
 ### 4.12 Linear Sommthing VS Piecewise Smoothing VS Sigmoid Smoothing Comparison
 
-| Linear Model – controlled_handheld_pan – Y_rot                                                   | Piecewise Model – controlled_handheld_pan – Y_rot                                                     | Sigmoid Model – controlled_handheld_pan – Y_rot                                                     |
-| ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
-| ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg)               | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg)               |
+| Linear Model – controlled_handheld_pan – Y_rot                                              | Piecewise Model – controlled_handheld_pan – Y_rot                                                               | Sigmoid Model – controlled_handheld_pan – Y_rot                                                             |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
 
 **What these graphs show**
 
@@ -702,6 +724,7 @@ Output example:
   - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
 
 - ### Sigmoid Model:
+
   - The sigmoid mapping is somewhere in between the linear and piecewise models. It is the none liener model among the three.
   - It sits -both conceptually and in practice- between the linear and piecewise models.
   - like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the steps between those two ends is non-linear, following a sigmoid curve.
@@ -710,6 +733,7 @@ Output example:
   - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
 
 - ### Comparitive Analysis:
+
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
 
   - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
@@ -719,10 +743,10 @@ Output example:
   - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
 
   - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a gradual transition between jitter reduction and responsiveness is desired.
-  In this current three-model setup,
+    In this current three-model setup,
   - The linear model can be seen as the Safe/Basic Control (Basic Mode),
   - The piecewise model as the manual/specific Control (Expert Mode),
-  - And the sigmoid model as the Organic/Automated Control (Smart Mode). 
+  - And the sigmoid model as the Organic/Automated Control (Smart Mode).
 
   Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
 
