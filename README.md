@@ -19,46 +19,48 @@ At the top level you should see something close to:
 
 ├── Dockerfile
 ├── docker-compose.yml
-├── parser.py
+├── parser.py                      # Parses the raw .log files into csv
 ├── kinematics.py
 ├── linear_sigma_model.py          # rolling σ + linear inverse mapping per axis
-├── linear_smoothing_sim.py               # offline simulation using linear model
+├── linear_smoothing_sim.py        # offline simulation using linear model
 ├── piecewise_sigma_model.py       # rolling σ + piecewise inverse mapping per axis
 ├── piecewise_smoothing_sim.py     # offline simulation using piecewise model
 ├── sigmoid_sigma_model.py         # rolling σ + sigmoid inverse mapping per axis
 ├── sigmoid_smoothing_sim.py       # offline simulation using sigmoid model
 ├── README.md
-├── scripts/        # Different bash scripts to run different models as separate services
-└── data/             # (not versioned)
-    ├── raw/          # Unreal log files or text exports
-    ├── processed/    # tracking_logs.csv
-    ├── derived/      # tracking_derivatives.csv
-    ├── modeled/      # contains modelled CSVs per model
+├── parse_validation.py            # Parses the validation raw .log files into csv
+├── validator.py                   # validates the smoothing results from UE runtime
+├── scripts/                       # Bash scripts to run different models as separate services
+└── data/                          # (not versioned)
+    ├── raw/                       # Unreal log files or text exports
+    ├── processed/                 # tracking_logs.csv
+    ├── derived/                   # tracking_derivatives.csv
+    ├── modeled/                   # contains modelled CSVs per model
     │   └── tracking_modelled_sigma.csv
     │   └── tracking_modelled_sigma_piecewise.csv
     │   └── tracking_modelled_sigma_sigmoid.csv
     ├── config/       # configuration JSONs per model
     │   └── linear_sigma_ranges.json    # σ ranges + speed bounds per axis (linear)
     │   └── piecewise_sigma_ranges.json # σ breaks + speed levels per axis (piecewise)
-    │   └── sigmoid_sigma_ranges.json   # σ inflection + speed bounds per axis (sigmoid)
+    │   └── sigmoid_sigma_ranges.json   # σ ranges + speed bounds per axis (sigmoid)
     └── plots/
-        ├── kinematics/
-        ├── kinematics_scenarios/
-        ├── linear_model_scenarios/
-        ├── linear_model_sigma_bars/
-        └── smoothing/
-    └── piecewise_plots/
-        ├── piecewise_model_scenarios/
-        ├── piecewise_model_sigma_bars/
-        └── smoothing/
+    │   ├── kinematics/
+    │   ├── kinematics_scenarios/
+    │   ├── linear_model_scenarios/
+    │   ├── linear_model_sigma_bars/
+    │   └── smoothing/
+    │── piecewise_plots/
+    │   ├── piecewise_model_scenarios/
+    │   ├── piecewise_model_sigma_bars/
+    │   └── smoothing/
     └── sigmoid_plots/
-        ├── sigmoid_model_scenarios/
-        ├── sigmoid_model_sigma_bars/
-        └── smoothing/
+    │   ├── sigmoid_model_scenarios/
+    │   ├── sigmoid_model_sigma_bars/
+    │   └── smoothing/
     ├── validation/
-        ├── raw/           # raw .log files from UE runtime
-        ├── processed/     # parsed csv files from the test raw logs
-        └── plots/         # validation plots
+    │   ├── raw/           # raw .log files from UE runtime
+    │   ├── processed/     # parsed csv files from the test raw logs
+    │   └── plots/         # validation plots
 ```
 
 ### 1.1 Code files
