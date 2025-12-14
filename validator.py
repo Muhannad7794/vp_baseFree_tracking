@@ -1,3 +1,13 @@
+# validator.py
+"""Validation script over Unreal Engine runtime sessions.
+It validates the smoothing effect on recorded motion data by comparing
+the raw and smoothed signals. It generates plots for visual inspection
+and computes metrics like jitter reduction and lag estimation.
+Additionally, the script allows for triggering the simualtion scripts
+of other models to compare their results to the result of the chosen
+model during runtime.
+"""
+
 import argparse
 import pandas as pd
 import numpy as np
@@ -25,7 +35,7 @@ def calculate_lag(t: np.ndarray, raw: np.ndarray, smooth: np.ndarray) -> float:
     if len(raw) != len(smooth):
         return 0.0
 
-    # Normalize
+    # Normalize for correlation calculation
     raw_norm = (raw - np.mean(raw)) / (np.std(raw) + 1e-9)
     smooth_norm = (smooth - np.mean(smooth)) / (np.std(smooth) + 1e-9)
 
@@ -33,7 +43,7 @@ def calculate_lag(t: np.ndarray, raw: np.ndarray, smooth: np.ndarray) -> float:
     lags = signal.correlation_lags(raw_norm.size, smooth_norm.size, mode="full")
 
     lag_index = lags[np.argmax(correlation)]
-    dt_mean = np.mean(np.diff(t))
+    dt_mean = np.mean(np.diff(t)) if np.any(np.diff(t)) else 1.0
     return lag_index * dt_mean
 
 
@@ -61,55 +71,56 @@ def process_file(csv_path):
         if col_raw not in df.columns:
             continue
 
-        # Extract & Center Data
+        # Extract Data
         y_raw = df[col_raw].values
         y_smooth = df[col_smooth].values
 
-        # 1. Normalize Offsets (Center them) for fair comparison
-        y_raw_centered = y_raw - np.mean(y_raw)
-        y_smooth_centered = y_smooth - np.mean(y_smooth)
+        # Align Smoothed signal to start at same value as Raw
+        start_offset = y_raw[0] - y_smooth[0]
+        y_smooth_aligned = y_smooth + start_offset
 
         # Metrics
         j_raw = calculate_jitter(y_raw, dt)
-        j_smooth = calculate_jitter(y_smooth, dt)
+        j_smooth = calculate_jitter(y_smooth_aligned, dt)
         j_reduction = j_raw / j_smooth if j_smooth > 0 else 0.0
-        lag_seconds = calculate_lag(t, y_raw_centered, y_smooth_centered)
-        lag_ms = lag_seconds * 1000.0
+        lag_seconds = calculate_lag(t, y_raw, y_smooth_aligned)
 
         # --- PLOTTING ---
         plt.figure(figsize=(12, 9))
 
         # 1. Raw vs smoothed motion
         ax1 = plt.subplot(3, 1, 1)
-        ax1.plot(t, y_raw_centered, label="Raw", color="tab:red", linewidth=1)
-        ax1.plot(t, y_smooth_centered, label="Smoothed", color="tab:green", linewidth=1)
+        ax1.plot(t, y_raw, label="Raw", color="tab:red", linewidth=1)
+        ax1.plot(t, y_smooth_aligned, label="Smoothed", color="tab:green", linewidth=1)
         ax1.set_title(f"{csv_path.stem} - {axis}: Raw vs Smoothed")
         ax1.set_ylabel("Amplitude")
         ax1.legend()
 
         # 2. Jitter Metric bar plot
         ax2 = plt.subplot(3, 1, 2)
-        bars = [j_raw, j_smooth]
-        bar_labels = [f"Raw\n({j_raw:.3f})", f"Smoothed\n({j_smooth:.3f})"]
-        bar_colors = ["tab:red", "tab:green"]
+        bars_x = np.arange(2)
 
-        ax2.bar(range(2), bars, color=bar_colors, width=0.4)
-        ax2.set_xticks(range(2))
+        bar_vals = [j_raw, j_smooth]
+        bar_labels = ["Raw", "Smoothed"]
+
+        ax2.bar(bars_x, bar_vals, color=["tab:red", "tab:green"])
+        ax2.set_xticks(bars_x)
         ax2.set_xticklabels(bar_labels)
+
         ymax = max(j_raw, j_smooth)
-        ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1)
+        ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
         ax2.set_ylabel("jitter (RMS of diff/dt)")
         ax2.set_title(
             f"Jitter Reduction: {j_raw:.3f} → {j_smooth:.3f}"
             f"({j_reduction:.2f}x lower)"
             if j_smooth > 0
-            else f"jitter reduction: {j_raw:.3f} → {j_smooth:.3f}"
+            else f"Jitter Reduction: {j_raw:.3f} → {j_smooth:.3f}"
         )
         ax2.grid(axis="y", linestyle="--", alpha=0.4)
 
         # 3. Lag / Delta
         ax3 = plt.subplot(3, 1, 3, sharex=ax1)
-        delta = y_smooth_centered - y_raw_centered
+        delta = y_smooth_aligned - y_raw
         # Plot the delta line
         ax3.plot(t, delta, label="Tracking lag (Delta)", color="#0b9ea8", linewidth=1)
         # Plot the baseLine (original time)
@@ -118,17 +129,16 @@ def process_file(csv_path):
         )
         ax3.set_xlabel("Time (s)")
         ax3.set_ylabel("difference")
-        ax3.set_title(f"Lag estimate ≈ {lag_ms*1000:.1f} ms")
-        ax3.fill_between(t, 0, delta, color="gray", alpha=0.1)
+        ax3.set_title(f"Lag estimate ≈ {lag_seconds*1000:.1f} ms")
+        ax3.fill_between(t, 0, delta, color="gray", alpha=0.2)
         ax3.legend()
 
         plt.tight_layout()
-
         save_path = session_plot_dir / f"{axis}_validation.jpg"
-        plt.savefig(save_path)
+        plt.savefig(save_path, dpi=150, bbox_inches="tight")
         plt.close()
 
-    print(f"    [OK] Plots saved to {session_plot_dir}")
+    print(f"  [OK] Plots saved to {session_plot_dir}")
 
 
 def main():

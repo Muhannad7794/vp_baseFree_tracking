@@ -18,6 +18,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from scipy import signal
 
 
 POS_AXES: List[str] = ["X_pose", "Y_pose", "Z_pose"]
@@ -208,18 +209,18 @@ def lag_estimate(raw: np.ndarray, smooth: np.ndarray, dt: np.ndarray) -> float:
     Estimate lag (in seconds) between raw and smoothed signals using
     cross-correlation. Positive lag means smoothed signal lags behind raw.
     """
-    x = raw - np.mean(raw)
-    y = smooth - np.mean(smooth)
 
-    corr = np.correlate(x, y, mode="full")
-    lags = np.arange(-len(x) + 1, len(x))
+    # Normalize for correlation calculation
+    x = (raw - np.mean(raw)) / (np.std(raw) + 1e-9)
+    y = (smooth - np.mean(smooth)) / (np.std(smooth) + 1e-9)
 
-    # Lag at maximum correlation (best alignment)
-    best_idx = int(np.argmax(corr))
-    best_lag_samples = lags[best_idx]
+    corr = signal.correlate(y, x, mode="full")
+    lags = signal.correlation_lags(len(x), len(y), mode="full")
 
+    # Lag at maximum correlation (for best alignment)
+    lag_index = lags[np.argmax(corr)]
     mean_dt = np.mean(dt) if np.any(dt > 0) else 1.0
-    return float(best_lag_samples * mean_dt)
+    return lag_index * mean_dt
 
 
 def make_plots(
@@ -246,17 +247,17 @@ def make_plots(
     jitter_raw = jitter_metric(raw, dt)
     jitter_smooth = jitter_metric(smooth, dt)
     jitter_reduction = (jitter_raw / jitter_smooth) if jitter_smooth > 0 else np.inf
-
     lag_sec = lag_estimate(raw, smooth, dt)
 
+    # PLOTTING
     plt.figure(figsize=(12, 9))
 
     # 1) Raw vs smoothed motion
     ax1 = plt.subplot(3, 1, 1)
     ax1.plot(t, raw, label="raw", linewidth=1)
-    ax1.plot(t, smooth, label="smoothed", linewidth=1)
-    ax1.set_ylabel(axis)
-    ax1.set_title(f"{label} – {axis}: raw vs smoothed")
+    ax1.plot(t, smooth, label="smoothed (linear)", linewidth=1)
+    ax1.set_ylabel("Amplitude")
+    ax1.set_title(f"{label} – {axis}: raw vs smoothed (Linear Model)")
     ax1.legend()
 
     # 2) Jitter metric bar plot
@@ -269,6 +270,7 @@ def make_plots(
     ax2.bar(bars_x, bars_vals, color=["tab:red", "tab:green"])
     ax2.set_xticks(bars_x)
     ax2.set_xticklabels(bars_labels)
+
     ymax = max(jitter_raw, jitter_smooth)
     ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
     ax2.set_ylabel("jitter (RMS of diff/dt)")
@@ -280,7 +282,7 @@ def make_plots(
     )
     ax2.grid(axis="y", linestyle="--", alpha=0.4)
 
-    # 3) Difference over time, with lag annotation
+    # 3) Difference over time
     ax3 = plt.subplot(3, 1, 3, sharex=ax1)
     diff = smooth - raw
     # Plot the delta line
@@ -290,7 +292,7 @@ def make_plots(
     ax3.set_xlabel("Time (s)")
     ax3.set_ylabel("difference")
     ax3.set_title(f"Lag estimate ≈ {lag_sec*1000:.1f} ms")
-    ax3.fill_between(t, 0, diff, color="gray", alpha=0.1)
+    ax3.fill_between(t, 0, diff, color="gray", alpha=0.2)
     ax3.legend()
 
     plt.tight_layout()
@@ -298,7 +300,7 @@ def make_plots(
     plt.close()
 
     print(
-        f"[smoothing_sim] Saved comparison plot to {out_path}\n"
+        f"  [linear_smoothing_sim] Saved comparison plot to {out_path}\n"
         f"  Jitter raw     : {jitter_raw:.4f}\n"
         f"  Jitter smoothed: {jitter_smooth:.4f}\n"
         f"  Reduction      : {jitter_reduction:.2f}x\n"

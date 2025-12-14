@@ -18,6 +18,7 @@ import json
 import math
 import os
 from typing import Dict, List
+from scipy import signal
 
 import matplotlib
 
@@ -120,17 +121,17 @@ def lag_estimate(raw: np.ndarray, smooth: np.ndarray, dt: np.ndarray) -> float:
     if len(raw) != len(smooth) or len(raw) < 2:
         return 0.0
 
-    x = raw - np.mean(raw)
-    y = smooth - np.mean(smooth)
+    # Normalize for correlation calculation
+    x = (raw - np.mean(raw)) / (np.std(raw) + 1e-9)
+    y = (smooth - np.mean(smooth)) / (np.std(smooth) + 1e-9)
 
-    corr = np.correlate(x, y, mode="full")
-    lags = np.arange(-len(x) + 1, len(x))
-    best_idx = int(np.argmax(corr))
-    best_lag_samples = lags[best_idx]
+    corr = signal.correlate(y, x, mode="full")
+    lags = signal.correlation_lags(len(x), len(y), mode="full")
 
-    valid_dt = dt[np.isfinite(dt) & (dt > 0)]
-    mean_dt = float(np.mean(valid_dt)) if valid_dt.size > 0 else 1.0
-    return float(best_lag_samples * mean_dt)
+    # Lag at maximum correlation (for best alignment)
+    lag_index = lags[np.argmax(corr)]
+    mean_dt = np.mean(dt) if np.any(dt > 0) else 1.0
+    return lag_index * mean_dt
 
 
 def make_piecewise_plots(
@@ -202,7 +203,7 @@ def make_piecewise_plots(
     ax3.set_xlabel("Time (s)")
     ax3.set_ylabel("difference")
     ax3.set_title(f"Lag estimate ≈ {lag_sec*1000:.1f} ms")
-    ax3.fill_between(t, 0, diff, color="gray", alpha=0.1)
+    ax3.fill_between(t, 0, diff, color="gray", alpha=0.2)
     ax3.legend()
 
     plt.tight_layout()
@@ -210,7 +211,7 @@ def make_piecewise_plots(
     plt.close()
 
     print(
-        f"[piecewise_smoothing_sim] Saved comparison plot to {out_path}\n"
+        f"  [piecewise_smoothing_sim] Saved comparison plot to {out_path}\n"
         f"  Jitter raw     : {jitter_raw:.4f}\n"
         f"  Jitter smoothed: {jitter_smooth:.4f}\n"
         f"  Reduction      : {jitter_reduction:.2f}x\n"
