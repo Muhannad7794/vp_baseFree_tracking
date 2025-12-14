@@ -283,11 +283,14 @@ def make_plots(
     # 3) Difference over time, with lag annotation
     ax3 = plt.subplot(3, 1, 3, sharex=ax1)
     diff = smooth - raw
-    ax3.plot(t, diff, label="smoothed - raw", linewidth=1)
-    ax3.axhline(0.0, color="black", linewidth=0.5)
-    ax3.set_xlabel("time (s)")
+    # Plot the delta line
+    ax3.plot(t, diff, label="Tracking lag (Delta)", color="#0b9ea8", linewidth=1)
+    # Plot the baseLine (original time)
+    ax3.axhline(0, label="original time", color="black", linestyle="--", linewidth=1)
+    ax3.set_xlabel("Time (s)")
     ax3.set_ylabel("difference")
     ax3.set_title(f"Lag estimate ≈ {lag_sec*1000:.1f} ms")
+    ax3.fill_between(t, 0, diff, color="gray", alpha=0.1)
     ax3.legend()
 
     plt.tight_layout()

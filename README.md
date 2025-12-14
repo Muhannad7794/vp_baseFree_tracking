@@ -670,7 +670,7 @@ Output example:
 docker compose run --rm sigmoid\
    python sigmoid_smoothing_sim.py\
         --logs data/processed/tracking_logs.csv\
-        --derivatives data/derived/tracking_derivatives.csv\
+        --derived data/derived/tracking_derivatives.csv\
         --config data/config/sigmoid_sigma_ranges.json\
         --axis Y_rot\
         --label fast_pan_tripod_02
