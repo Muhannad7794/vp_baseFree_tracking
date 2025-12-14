@@ -1,11 +1,17 @@
 import re
 from pathlib import Path
 import pandas as pd
+import numpy as np
 import os
 
 # --- CONFIGURATION ---
 INPUT_DIR = Path("data/validation/raw")
-OUTPUT_DIR = Path("data/validation/processed/")
+OUTPUT_DIR_VALIDATION = Path("data/validation/processed/")
+OUTPUT_DIR_SIMULATION = Path("data/validation/simulate/")
+
+# Math Constants for Derivatives
+WINDOW_SIZE = 8  # Matches C++ Ring Buffer size
+DT_DEFAULT = 0.011  # ~90Hz fallback
 
 
 def parse_log_file(file_path):
@@ -16,7 +22,7 @@ def parse_log_file(file_path):
 
     parsed_rows = []
 
-    # Regex finds the line, ignoring the prefix (timestamp, LogBlueprintUserMessages, etc.)
+    # Robust Regex
     regex_pattern = r"TRACKDATA.*?,(.*)"
 
     match_count = 0
@@ -28,25 +34,15 @@ def parse_log_file(file_path):
                 match = re.search(regex_pattern, line)
                 if match:
                     try:
-                        # 1. Get the raw CSV string part
                         csv_content = match.group(1)
-
-                        # 2. Aggressive Cleaning
-                        # Remove literal "\n" (backslash n) often found in UE logs
+                        # Cleanups
                         csv_content = csv_content.replace(r"\n", "")
-                        # Remove normal newlines
                         csv_content = csv_content.replace("\n", "").replace("\r", "")
-                        # Remove quotes
                         csv_content = csv_content.replace('"', "").strip()
 
-                        # 3. Split and Clean individual items
-                        # We use a list comprehension to strip every single item
                         parts = [p.strip() for p in csv_content.split(",")]
-
-                        # 4. Filter empty strings (caused by trailing commas)
                         parts = [p for p in parts if p]
 
-                        # We need at least 14 columns
                         if len(parts) >= 14:
                             row = {
                                 "Time": float(parts[0]),
@@ -71,24 +67,91 @@ def parse_log_file(file_path):
                         else:
                             if error_count < 1:
                                 print(
-                                    f"    Skipping malformed line (len={len(parts)}). Content sample: {csv_content[:20]}..."
+                                    f"    Skipping malformed line (len={len(parts)})..."
                                 )
                             error_count += 1
 
                     except ValueError as e:
                         if error_count < 3:
-                            print(
-                                f"    Value Error parsing line: {e} | Content: {csv_content}"
-                            )
+                            print(f"    Value Error: {e}")
                         error_count += 1
 
     print(f"    Found {match_count} valid frames.")
     return pd.DataFrame(parsed_rows)
 
 
+def convert_to_simulation_format(df, filename_stem):
+    """
+    Converts Validation DF -> Simulation Standard Format.
+    """
+    sim_data = []
+
+    for _, row in df.iterrows():
+        label = row["Label"]
+        # Default scenario logic
+        scenario = label
+        take = 1
+
+        sim_row = {
+            "time": row["Time"],
+            "label": label,
+            "scenario": scenario,
+            "take": take,
+            # Map Raw values to standard names
+            "X_pose": row["X_pose_raw"],
+            "Y_pose": row["Y_pose_raw"],
+            "Z_pose": row["Z_pose_raw"],
+            "X_rot": row["X_rot_raw"],
+            "Y_rot": row["Y_rot_raw"],
+            "Z_rot": row["Z_rot_raw"],
+            "file": filename_stem,
+        }
+        sim_data.append(sim_row)
+
+    return pd.DataFrame(sim_data)
+
+
+def calculate_derivatives_formatted(df):
+    """
+    Calculates Velocity and Acceleration matching the specific naming convention
+    required by the simulation script: V_Axis, A_Axis
+    """
+    df = df.sort_values("time").reset_index(drop=True)
+
+    # Calculate dt
+    df["dt"] = df["time"].diff().fillna(DT_DEFAULT)
+    df["dt"] = df["dt"].replace(0, DT_DEFAULT)
+
+    # The axes we need to process
+    axes = ["X_pose", "Y_pose", "Z_pose", "X_rot", "Y_rot", "Z_rot"]
+
+    # Initialize result with metadata
+    results = df[["time", "label", "scenario", "take", "dt"]].copy()
+
+    for axis in axes:
+        # 1. Velocity (V_)
+        vel = df[axis].diff() / df["dt"]
+        vel = vel.fillna(0)
+
+        # 2. Acceleration (A_)
+        acc = vel.diff() / df["dt"]
+        acc = acc.fillna(0)
+
+        # 3. Add to results with correct prefix
+        results[f"V_{axis}"] = vel
+        results[f"A_{axis}"] = acc
+
+        # Note: The simulation script calculates Sigma internally from A_Axis,
+        # or we can add it here if needed, but A_Axis is the strict requirement.
+
+    return results
+
+
 def main():
-    if not OUTPUT_DIR.exists():
-        os.makedirs(OUTPUT_DIR)
+    if not OUTPUT_DIR_VALIDATION.exists():
+        os.makedirs(OUTPUT_DIR_VALIDATION)
+    if not OUTPUT_DIR_SIMULATION.exists():
+        os.makedirs(OUTPUT_DIR_SIMULATION)
 
     if not INPUT_DIR.exists():
         print(f"Error: Input directory '{INPUT_DIR}' does not exist.")
@@ -101,12 +164,28 @@ def main():
         return
 
     for log_file in log_files:
-        df = parse_log_file(log_file)
+        # 1. Parse log
+        df_val = parse_log_file(log_file)
 
-        if df is not None and not df.empty:
-            output_path = OUTPUT_DIR / f"{log_file.stem}_parsed.csv"
-            df.to_csv(output_path, index=False)
-            print(f"    [OK] Saved to {output_path}")
+        if df_val is not None and not df_val.empty:
+            # 2. Save Validation CSV (Raw vs Smooth)
+            val_out_path = OUTPUT_DIR_VALIDATION / f"{log_file.stem}_parsed.csv"
+            df_val.to_csv(val_out_path, index=False)
+            print(f"    [VAL] Saved: {val_out_path.name}")
+
+            # 3. Convert to Sim Format (Raw only)
+            df_sim = convert_to_simulation_format(df_val, log_file.stem)
+            sim_out_path = OUTPUT_DIR_SIMULATION / f"{log_file.stem}.csv"
+            df_sim.to_csv(sim_out_path, index=False)
+            print(f"    [SIM] Saved: {sim_out_path.name}")
+
+            # 4. Calculate Derivatives (V_, A_)
+            df_derivs = calculate_derivatives_formatted(df_sim)
+            deriv_out_path = OUTPUT_DIR_SIMULATION / f"{log_file.stem}_derivatives.csv"
+            df_derivs.to_csv(deriv_out_path, index=False)
+            print(f"    [DRV] Saved: {deriv_out_path.name}")
+
+            print("-" * 30)
         else:
             print(f"    [WARNING] No data extracted from {log_file.name}")
 
