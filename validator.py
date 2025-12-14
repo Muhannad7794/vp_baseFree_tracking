@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from pathlib import Path
+from scipy import signal
 
 # --- CONFIGURATION ---
 INPUT_DIR = Path("data/validation/processed")
@@ -19,6 +20,23 @@ def calculate_jitter(series: np.ndarray, dt_mean: float) -> float:
     return float(np.sqrt(np.mean(velocity**2)))
 
 
+def calculate_lag(t: np.ndarray, raw: np.ndarray, smooth: np.ndarray) -> float:
+    """Estimates time lag using Cross-Correlation."""
+    if len(raw) != len(smooth):
+        return 0.0
+
+    # Normalize
+    raw_norm = (raw - np.mean(raw)) / (np.std(raw) + 1e-9)
+    smooth_norm = (smooth - np.mean(smooth)) / (np.std(smooth) + 1e-9)
+
+    correlation = signal.correlate(raw_norm, smooth_norm, mode="full")
+    lags = signal.correlation_lags(raw_norm.size, smooth_norm.size, mode="full")
+
+    lag_index = lags[np.argmax(correlation)]
+    dt_mean = np.mean(np.diff(t))
+    return lag_index * dt_mean
+
+
 def process_file(csv_path):
     print(f"--> Validating: {csv_path.name}")
     try:
@@ -32,7 +50,7 @@ def process_file(csv_path):
     t = t - t[0]
     dt = np.mean(np.diff(t)) if len(t) > 1 else 0.016
 
-    # Create subfolder for this session
+    # Create subfolder
     session_plot_dir = OUTPUT_PLOT_DIR / csv_path.stem
     session_plot_dir.mkdir(parents=True, exist_ok=True)
 
@@ -43,51 +61,70 @@ def process_file(csv_path):
         if col_raw not in df.columns:
             continue
 
-        # Extract Data
+        # Extract & Center Data
         y_raw = df[col_raw].values
         y_smooth = df[col_smooth].values
 
-        # 1. Normalize Offsets (Center them) so we can compare motion
+        # 1. Normalize Offsets (Center them) for fair comparison
         y_raw_centered = y_raw - np.mean(y_raw)
         y_smooth_centered = y_smooth - np.mean(y_smooth)
 
-        # 2. Metrics
+        # Metrics
         j_raw = calculate_jitter(y_raw, dt)
         j_smooth = calculate_jitter(y_smooth, dt)
-        reduction = j_raw / j_smooth if j_smooth > 0 else 0.0
+        j_reduction = j_raw / j_smooth if j_smooth > 0 else 0.0
+        lag_seconds = calculate_lag(t, y_raw_centered, y_smooth_centered)
+        lag_ms = lag_seconds * 1000.0
 
-        # 3. Plotting
-        plt.figure(figsize=(10, 8))
+        # --- PLOTTING ---
+        plt.figure(figsize=(12, 9))
 
-        # Top: Path Overlay
-        plt.subplot(2, 1, 1)
-        plt.plot(
-            t, y_raw_centered, label="Raw (Centered)", color="silver", linewidth=1.5
-        )
-        plt.plot(
-            t,
-            y_smooth_centered,
-            label="Smoothed (Centered)",
-            color="#2ecc71",
-            linewidth=2.0,
-        )
-        plt.title(f"{csv_path.stem} | {axis} | Jitter Red: {reduction:.2f}x")
-        plt.ylabel("Relative Units")
-        plt.legend()
-        plt.grid(alpha=0.3)
+        # 1. Raw vs smoothed motion
+        ax1 = plt.subplot(3, 1, 1)
+        ax1.plot(t, y_raw_centered, label="Raw", color="tab:red", linewidth=1)
+        ax1.plot(t, y_smooth_centered, label="Smoothed", color="tab:green", linewidth=1)
+        ax1.set_title(f"{csv_path.stem} - {axis}: Raw vs Smoothed")
+        ax1.set_ylabel("Amplitude")
+        ax1.legend()
 
-        # Bottom: Jitter Bar
-        plt.subplot(2, 1, 2)
+        # 2. Jitter Metric bar plot
+        ax2 = plt.subplot(3, 1, 2)
         bars = [j_raw, j_smooth]
-        colors = ["#e74c3c", "#27ae60"]
-        plt.bar(["Raw Input", "Smoothed"], bars, color=colors, width=0.5)
-        plt.ylabel("Noise Level (RMS Velocity)")
-        plt.title("Noise Comparison (Lower is Better)")
-        plt.grid(axis="y", alpha=0.3)
+        bar_labels = [f"Raw\n({j_raw:.3f})", f"Smoothed\n({j_smooth:.3f})"]
+        bar_colors = ["tab:red", "tab:green"]
 
-        # Save
-        save_path = session_plot_dir / f"{axis}_validation.jpg"
+        ax2.bar(range(2), bars, color=bar_colors, width=0.4)
+        ax2.set_xticks(range(2))
+        ax2.set_xticklabels(bar_labels)
+        ymax = max(j_raw, j_smooth)
+        ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1)
+        ax2.set_ylabel("jitter (RMS of diff/dt)")
+        ax2.set_title(
+            f"Jitter Reduction: {j_raw:.3f} → {j_smooth:.3f}"
+            f"({j_reduction:.2f}x lower)"
+            if j_smooth > 0
+            else f"jitter reduction: {j_raw:.3f} → {j_smooth:.3f}"
+        )
+        ax2.grid(axis="y", linestyle="--", alpha=0.4)
+
+        # 3. Lag / Delta
+        ax3 = plt.subplot(3, 1, 3, sharex=ax1)
+        delta = y_smooth_centered - y_raw_centered
+        # Plot the delta line
+        ax3.plot(t, delta, label="Tracking lag (Delta)", color="#0b9ea8", linewidth=1)
+        # Plot the baseLine (original time)
+        ax3.axhline(
+            0, label="original time", color="black", linestyle="--", linewidth=1
+        )
+        ax3.set_xlabel("Time (s)")
+        ax3.set_ylabel("difference")
+        ax3.set_title(f"Lag estimate ≈ {lag_ms*1000:.1f} ms")
+        ax3.fill_between(t, 0, delta, color="gray", alpha=0.1)
+        ax3.legend()
+
         plt.tight_layout()
+
+        save_path = session_plot_dir / f"{axis}_validation.jpg"
         plt.savefig(save_path)
         plt.close()
 
@@ -95,7 +132,7 @@ def process_file(csv_path):
 
 
 def main():
-    # CLI args (optional)
+    # CLI args
     parser = argparse.ArgumentParser()
     parser.add_argument("--file", type=str, help="Specific file to process")
     args = parser.parse_args()
