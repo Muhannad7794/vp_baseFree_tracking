@@ -39,7 +39,7 @@ def calculate_lag(t: np.ndarray, raw: np.ndarray, smooth: np.ndarray) -> float:
     raw_norm = (raw - np.mean(raw)) / (np.std(raw) + 1e-9)
     smooth_norm = (smooth - np.mean(smooth)) / (np.std(smooth) + 1e-9)
 
-    correlation = signal.correlate(raw_norm, smooth_norm, mode="full")
+    correlation = signal.correlate(smooth_norm, raw_norm, mode="full")
     lags = signal.correlation_lags(raw_norm.size, smooth_norm.size, mode="full")
 
     lag_index = lags[np.argmax(correlation)]

@@ -144,7 +144,7 @@ def run_simulation_for_axis(
     # Acceleration buffer for rolling std
     buffer: List[float] = []
 
-    min_samples_for_sigma = max(1, window // 2)
+    min_samples_for_sigma = 2
 
     for i in range(n):
         a = accel[i]
