@@ -22,11 +22,11 @@ OUTPUT_PLOT_DIR = Path("data/validation/plots")
 AXES_TO_PLOT = ["X_pose", "Y_pose", "Z_pose", "X_rot", "Y_rot", "Z_rot"]
 
 
-def calculate_jitter(series: np.ndarray, dt_mean: float) -> float:
+def calculate_jitter(series: np.ndarray, dt: np.ndarray) -> float:
     """RMS of velocity (first difference)"""
     if len(series) < 2:
         return 0.0
-    velocity = np.diff(series) / dt_mean
+    velocity = np.diff(series) / dt
     return float(np.sqrt(np.mean(velocity**2)))
 
 
@@ -43,8 +43,8 @@ def calculate_lag(t: np.ndarray, raw: np.ndarray, smooth: np.ndarray) -> float:
     lags = signal.correlation_lags(raw_norm.size, smooth_norm.size, mode="full")
 
     lag_index = lags[np.argmax(correlation)]
-    dt_mean = np.mean(np.diff(t)) if np.any(np.diff(t)) else 1.0
-    return lag_index * dt_mean
+    dt = np.mean(np.diff(t)) if np.any(np.diff(t)) else 1.0
+    return lag_index * dt
 
 
 def process_file(csv_path):
@@ -58,7 +58,10 @@ def process_file(csv_path):
     # Normalize Time
     t = df["Time"].values
     t = t - t[0]
-    dt = np.mean(np.diff(t)) if len(t) > 1 else 0.04
+    dt = np.diff(t)
+
+    # Safety: Fix zero or negative time deltas (logging artifacts)
+    dt = np.maximum(dt, 1e-3)
 
     # Create subfolder
     session_plot_dir = OUTPUT_PLOT_DIR / csv_path.stem
