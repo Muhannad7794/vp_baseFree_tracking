@@ -58,7 +58,7 @@ def process_file(csv_path):
     # Normalize Time
     t = df["Time"].values
     t = t - t[0]
-    dt = np.mean(np.diff(t)) if len(t) > 1 else 0.016
+    dt = np.mean(np.diff(t)) if len(t) > 1 else 0.04
 
     # Create subfolder
     session_plot_dir = OUTPUT_PLOT_DIR / csv_path.stem
