@@ -78,7 +78,7 @@ def process_file(csv_path):
         y_raw = df[col_raw].values
         y_smooth = df[col_smooth].values
 
-        # Align Smoothed signal to start at same value as Raw
+        # Align Smoothed signal to account for UE offset function and start difference
         start_offset = y_raw[0] - y_smooth[0]
         y_smooth_aligned = y_smooth + start_offset
 
