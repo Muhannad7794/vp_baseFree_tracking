@@ -137,9 +137,25 @@ At the top level you should see something close to:
     sigmoid mapping, then plots raw vs smoothed motion, jitter reduction and lag.
     Plots go to `data/sigmoid_plots/smoothing/`.
 
+#### Validation files:
+
+- **`parse_validation.py`**
+
+  - Parses raw Unreal log or text files from `data/validation/raw/`,
+  - extracts the lines produced by the logging blueprint,
+  - writes clean tables to `data/validation/processed/`.
+  - writes a 6DOF version of the processes csv to `data/validation/simualte/`.
+    The generated file would be used to compute kinematics.
+  - writes derived kinematics from the processed csv to `data/validation/simualte/`. The The generated file would be used in the simulation pipeline.
+
+- **`validation.py`**
+  - compares the raw and smoothed trajectories,
+  - computes the key metrics; RMS error, lag, jitter, and smoothness,
+  - generates validation plots in `data/validation/plots/`.
+
 ---
 
-## 2. Data format
+## 2. Data Pipeline - Datasets Generation
 
 ### 2.1 Starting dataset: `tracking_logs.csv`
 
@@ -336,7 +352,7 @@ Output example (saved as JPG):
 | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | ![handheld_full_nav_01_X_pose](data/plots/kinematics/handheld_full_nav_01_X_pose.jpg) | ![StillOnTripod_01_X_pose](data/plots/kinematics/StillOnTripod_01_X_pose.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - The top line is the **position** along X; the lower lines show **velocity** and **acceleration** for the same axis.
 - In a **handheld full navigation** take, position drifts slowly while velocity and acceleration show noticeable variation – the camera is moving through space.
@@ -370,7 +386,7 @@ Output example:
 | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | ![handheld_still_X_pose](data/plots/kinematics_scenarios/handheld_still_X_pose.jpg) | ![StillOnTripod_X_pose](data/plots/kinematics_scenarios/StillOnTripod_X_pose.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - Each colour is one **take** within the same scenario.
 - The top subplot shows that handheld-still shots have small but visible drift compared to tripod shots.
@@ -405,7 +421,7 @@ Output example:
 | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | ![controlled_handheld_pan_Y_rot](data/plots/linear_model_scenarios/controlled_handheld_pan_Y_rot.jpg) | ![fast_pan_tripod_Y_rot](data/plots/linear_model_scenarios/fast_pan_tripod_Y_rot.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
 - The bottom subplot is the resulting **InterpSpeed** chosen by the model at each time.
@@ -440,7 +456,7 @@ Output example:
 | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
 | ![sigma_bar_Z_pose](data/plots/linear_model_sigma_bars/sigma_bar_Z_pose.jpg) | ![sigma_bar_Z_rot](data/plots/linear_model_sigma_bars/sigma_bar_Z_rot.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
 - Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
@@ -451,7 +467,7 @@ These bar plots justify the choice of `min_sigma` and `max_sigma` per axis and i
 
 ---
 
-### 4.5 Smoothing simulation (raw vs smoothed motion, jitter, lag)
+### 4.5 Smoothing simulation (linear Model) (raw vs smoothed motion, jitter, lag)
 
 **Command**
 
@@ -474,7 +490,7 @@ Output example:
 | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
 | ![fast_pan_tripod_02_Y_rot](data/plots/smoothing/fast_pan_tripod_02_Y_rot.jpg) | ![fast_tilt_tripod_02_Y_rot](data/plots/smoothing/fast_tilt_tripod_02_Y_rot.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 Each figure has three parts:
 
@@ -519,7 +535,7 @@ Output example:
 | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/piecewise_model_scenarios/controlled_handheld_pan_Y_rot_piecewise.jpg) | ![fast_pan_tripod_Y_rot](data/piecewise_plots/piecewise_model_scenarios/fast_pan_tripod_Y_rot_piecewise.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
 - The bottom subplot is the resulting **InterpSpeed** chosen by the piecewise model at each time.
@@ -551,7 +567,7 @@ Output example:
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | ![sigma_bar_Z_pose](data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_pose_piecewise.jpg) | ![sigma_bar_Z_rot](data/piecewise_plots/piecewise_model_sigma_bars/sigma_bar_Z_rot_piecewise.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
 - Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
@@ -569,7 +585,7 @@ Output example:
 docker compose run --rm piecewise\
    python piecewise_smoothing_sim.py\
         --logs data/processed/tracking_logs.csv\
-        --derivatives data/derived/tracking_derivatives.csv\
+        --derived data/derived/tracking_derivatives.csv\
         --config data/config/piecewise_sigma_ranges.json\
         --axis Y_rot\
         --label fast_pan_tripod_02
@@ -584,7 +600,7 @@ Output example:
 | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | ![fast_pan_tripod_02_Y_rot](data/piecewise_plots/smoothing/fast_pan_tripod_02_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_03_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) |
 
-**What these graphs show**
+**What these plots show**
 Each figure has three parts:
 
 1. **Raw vs smoothed motion over time**
@@ -622,7 +638,7 @@ Output example:
 | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
 | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/controlled_handheld_pan_Y_rot.jpg) | ![fast_pan_tripod_Y_rot](data/sigmoid_plots/sigmoid_model_scenarios/fast_pan_tripod_Y_rot.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - The top subplot is the rolling **σ of angular acceleration** on Y (instability measure).
 - The bottom subplot is the resulting **InterpSpeed** chosen by the sigmoid model at each time.
@@ -654,7 +670,7 @@ Output example:
 | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | ![sigma_bar_Z_pose](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_pose.jpg) | ![sigma_bar_Z_rot](data/sigmoid_plots/sigmoid_model_sigma_bars/sigma_bar_Z_rot.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - Each bar represents the **90th percentile of σ** for one scenario on a given axis.
 - Bars are ordered by motion type (tripod, handheld, travel, fast, etc.).
@@ -687,7 +703,7 @@ Output example:
 | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | ![fast_pan_tripod_02_Y_rot](data/sigmoid_plots/smoothing/fast_pan_tripod_02_Y_rot_sigmoid.jpg) | ![controlled_handheld_pan_03_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - Each figure has three parts:
 
@@ -711,7 +727,7 @@ Output example:
 | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
 
-**What these graphs show**
+**What these plots show**
 
 - ### Linear Model:
 
@@ -754,7 +770,204 @@ Output example:
 
 ---
 
-## 5. Modularity and scalability
+## 5. Runtime implementation
+
+- The logic demonstrated in `<any_model>_smoothing_sim.py` was used as pseudo-code for building the C++ scripts and Blueprints inside Unreal Engine.
+- The flexibility offered by the system allowed implementing all three models in Unreal Engine's runtime.
+- The configuration files generated by each model script (`<model>_sigma_ranges.json`) were used to set up the parameters inside Unreal Engine. This ensured consistency between the offline analysis and the real-time implementation.
+- Once the parameters were set for each model, it was possible to switch between different models from within Unreal Engine.
+- Each model would apply its own smoothing logic, while adhering to the same overall principles:
+  - Maintain a per-axis acceleration buffer.
+  - Compute rolling σ with a fixed window size.
+  - Map σ to InterpSpeed using pre-computed bounds.
+  - Apply FInterpTo each frame.
+
+---
+
+## 6. Validation Pipeline
+
+Unlike the simulation pipeline, the bash script running the validation service triggers `validator.py` to automatically computes the metrics and generates the plots of all labels and axes in every available _.log_ file placed in `data/validation/raw/`. With that said, the validation script can also be run on files individually with custom CLI command using the argument "--file".
+
+**Command**
+
+```bash
+docker compose run --rm validattion\
+    python validator.py\
+        --file data/validation/raw/<log_file>.log
+```
+
+### 6.1 Parsing Runtime Logs
+
+- After obtaining raw Unreal Engine logs from the runtime implementation, the first step is to parse these logs to extract relevant tracking data. This is done using the `parse_validation.py` script.
+- From there, `validator.py` computes the key metrics and generates the validation plots.
+
+### 6.2 Validation Metrics
+
+- The validation process focuses on several key metrics to assess the performance of the smoothing algorithms:
+  - **RMS Error**: Measures the root mean square error between the raw and smoothed trajectories.
+  - **Lag**: Estimates the time delay introduced by the smoothing process.
+  - **Jitter**: Quantifies the high-frequency noise present in the motion data.
+  - **Smoothness**: Evaluates the overall smoothness of the trajectory after applying the smoothing algorithm.
+
+### 6.3 Validation Plots
+
+#### 6.3.1 Core Functionality
+
+- The validation scripts generate a series of plots to visually compare the raw and smoothed trajectories:
+  - **Trajectory Comparison**: Plots showing raw vs smoothed motion over time.
+  - **Jitter Reduction**: Bar charts illustrating the reduction in jitter before and after smoothing.
+  - **Lag Estimation**: Graphs depicting the difference between smoothed and raw signals, along with estimated lag values.
+
+**_Example:_**
+
+- `data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg`
+
+| linear test_01 (runtime) – Y_pose                                                            |
+| -------------------------------------------------------------------------------------------- |
+| ![linear_test_01(runtime)](data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg) |
+
+**What these plots show**
+
+- The top part of the figure shows the raw vs smoothed motion over time for the specified axis.
+- The middle part displays the jitter metric before and after smoothing, indicating the effectiveness of the algorithm in reducing high-frequency noise.
+- The bottom part illustrates the difference between the smoothed and raw signals, along with an estimated lag value in milliseconds.
+
+#### 6.3.2 Poly-model Comparison
+
+- The validation pipeline can utilize the 6DOF version of the processed logs. This version can be used as input to any of the simulation scripts (`<model>_smoothing_sim.py`). This allows users to see how would the shot have behaved if any of the models were applied during runtime.
+- This provides valuable insights into the comparative performance of different smoothing algorithms on the same shot or scenario.
+
+**_Example 1 (Set to Linear Model at Runtime):_**
+
+**Command**
+
+```bash
+docker compose run --rm piecewise \
+  python piecewise_smoothing_sim.py \
+      --logs data/validation/simulate/linear_test_01.csv \
+      --derived data/validation/simulate/linear_test_01_derivatives.csv \
+      --config data/config/piecewise_sigma_ranges.json \
+      --axis X_rot \
+      --label linear_test_01
+```
+
+output example:
+
+- `data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg`
+- `data/piecewise_plots/smoothing/piecewise_test_01_X_rot_piecewise.jpg`
+
+| linear test_01 (runtime) – Z_rot                                                             | piecewise test_01 (simulation) –Z_rot                                                               |
+| -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| ![linear_test_01(runtime)](data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg) | ![piecewise_test_01(simulation)](data/piecewise_plots/smoothing/linear_test_01_X_rot_piecewise.jpg) |
+
+**What these plots show**
+
+- These plots show -side by side- how a specific axis would behave in this shot if the piecewise model was selected at runtime.
+
+**_Example 2 (Set to Linear Model at Runtime):_**
+
+**Command**
+
+```bash
+docker compose run --rm sigmoid \
+  python sigmoid_smoothing_sim.py \
+      --logs data/validation/simulate/piecewise_test_01.csv \
+      --derived data/validation/simulate/piecewise_test_01_derivatives.csv \
+      --config data/config/sigmoid_sigma_ranges.json \
+      --axis Y_pose \
+      --label piecewise_test_01
+```
+
+output example:
+
+- `data/validation/plots/piecwise_test_01_parsed/Y_pose_validation.jpg`
+- `data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_piecewise.jpg`
+
+| piecewise test_01 (runtime) – Y_rot                                                                 | sigmoid test_01 (simulation) – Y_rot                                                              |
+| --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| ![piecewise_test_01(runtime)](data/validation/plots/piecewise_test_01_parsed/Y_pose_validation.jpg) | ![sigmoid_test_01(simulation)](data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_sigmoid.jpg) |
+
+**What these plots show**
+
+- These plots show -side by side- how a specific axis would behave in this shot if the sigmoid model was selected at runtime.
+
+**Findings:** _The setup allows for accessing direct comparitive analysis between the different models, without the complexity and hassle of replicating the exact same physical camera movement for another test shot, which requires extensive setup and expensive machinery like advanced robotic arms._
+
+#### 6.3.3 Mono-model Comparison
+
+- The same 6DOF version of the processed logs can be utilized as the input of the simulation script corresponding to the model used during runtime.
+- This allows users to validate the performance of the specific model across runtime and simulation, ensuring consistency and reliability of the smoothing algorithm.
+
+**_Example 1 (Set to piecewise Model at Runtime and simulation):_**
+
+**Command**
+
+```bash
+docker compose run --rm piecewise \
+  python piecewise_smoothing_sim.py \
+      --logs data/validation/simulate/piecewise_test_01.csv \
+      --derived data/validation/simulate/piecewise_test_01_derivatives.csv \
+      --config data/config/piecewise_sigma_ranges.json \
+      --axis X_rot \
+      --label piecewise_test_01
+```
+
+output example:
+
+- `data/validation/plots/piecewise_test_01_parsed/Z_rot_validation.jpg`
+- `data/piecewise_plots/smoothing/piecewise_test_01_Z_rot_piecewise.jpg`
+
+| piecewise test_01 (runtime) – Z_rot                                                                | piecewise test_01 (simulation) –Z_rot                                                                  |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01_parsed/Z_rot_validation.jpg) | ![piecewise test_01(simulation)](data/piecewise_plots/smoothing/piecewise_test_01_Z_rot_piecewise.jpg) |
+
+**What these plots show**
+
+- The graph shows a side-by-side perfromance comparison of the piecewise model across the runtime environment and the offline simulation.
+
+**_Example 2 (Set to sigmoid Model at Runtime and simulation):_**
+
+**Command**
+
+```bash
+docker compose run --rm sigmoid \
+  python sigmoid_smoothing_sim.py \
+      --logs data/validation/simulate/sigmoid_test_01.csv \
+      --derived data/validation/simulate/sigmoid_test_01_derivatives.csv \
+      --config data/config/sigmoid_sigma_ranges.json \
+      --axis Z_pose \
+      --label sigmoid_test_01
+```
+
+- `data/validation/plots/sigmoid_test_01_parsed/Z_pose_validation.jpg`
+- `data/sigmoid_plots/smoothing/sigmoid_test_01_Z_pose_sigmoid.jpg`
+
+| sigmoid test_01 (runtime) – Z_pose                                                              | sigmoid test_01 (simulation) –Z_pose                                                            |
+| ----------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01_parsed/Z_pose_validation.jpg) | ![sigmoid test_01(simulation)](data/sigmoid_plots/smoothing/sigmoid_test_01_Z_pose_sigmoid.jpg) |
+
+**What these plots show**
+
+- The graph shows a side-by-side perfromance comparison of the sigmoid model across the runtime environment and the offline simulation.
+
+**Findings:** _The similarity in both the computational and visual results asserts the models' stability across simulation and runtime.This proofs that even with external factors like signal delay, environmental changes during shooting, and others, the models are performing as expected._
+
+#### 6.3.4 Conclusive Comparison
+
+By launching the system with `docker compose up --build -d`, if there are any .log files from runtime sessions at `data/validation/raw`, then those files will be processed automatically and generate validation plots for all 6 axes.
+
+| Linear test_01 (runtime) – X_rot                                                             | Piecewise test_01 (runtime) – X_rot                                                                | Sigmoid test_01 (runtime) – X_rot                                                              |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| ![linear test_01(runtime)](data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg) | ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01_parsed/X_rot_validation.jpg) | ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01_parsed/X_rot_validation.jpg) |
+
+**What these plots show**
+
+- These plots are from differnt shots, each had a differnt model set at runtime.
+- No matter the chose model or the targeted axis, the validation plot provides those insightful plots, making it a robust and relible validation tool for any runtime session.
+
+---
+
+## 7. Modularity and scalability
 
 This project is structured so that individual components can be replaced or extended without breaking the rest:
 
@@ -765,27 +978,24 @@ This project is structured so that individual components can be replaced or exte
   `kinematics.py` centralises time-based derivatives. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
 
 - **Models**
-
   - `linear_sigma_model.py` implements a single, interpretable baseline.
     `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mappings strategies based on their sigma breakpoints and speed ranges.
   - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
 
-- **Runtime implementation**
-  - The logic demonstrated in `<any_model>_smoothing_sim.py` maps directly to an Unreal Engine implementation.
-  - The flexibility offered by the system to create different models allow for different runtime implementations within Unreal Engine to be tested and compared easily.
-  - All different runtime implementations will apply their own smoothing logic, while adhering to the same overall principles:
-    - Maintain a per-axis acceleration buffer.
-    - Compute rolling σ with a fixed window size.
-    - Map σ to InterpSpeed using pre-computed bounds.
-    - Apply FInterpTo each frame.
+-**Validation**
+-The validation pipeline processes the raw .log files at `data/validation/raw` and creates the .csv files needed for the service.
+
+- Each runtime session from any chosen model would have 6 validation plots, one for each axis, to make it possible to validate the smoothing performance during runtime on any of the models.
+- The generated .csv files at `data/validation/simualte` can be utilzed to run offline simualtion on any `<model>_smoothing_sim.py`scripts. This allows direct comparison across the differnt models on the same shot.
+- The same files can be furhter utilized to provide direct comparison across the differnt environments on the same model.
 
 ---
 
-## 6. Summary
+## 8. Summary
 
 To reproduce the core results:
 
-1. Provide or generate a `data/processed/tracking_logs.csv` with the schema described in §2.
+1. Provide or generate raw .log files `data/raw/` to generate the csv files required by the modelling pipeline
 
 2. Run the pipeline inside Docker:
 
@@ -795,5 +1005,14 @@ To reproduce the core results:
    ```
 
 3. Generate any of the example plots using the CLI commands as shown in §4.
+
+4. Provide or generate raw .log files `data/validation/raw/` to generate the csv files required by the validation pipeline
+
+5. Run the pipeline inside Docker:
+
+   ```bash
+   docker compose build
+   docker compose run --rm validation   # or any other service
+   ```
 
 The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability when testing with adding new models or datasets.
