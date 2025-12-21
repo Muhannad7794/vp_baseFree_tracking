@@ -986,16 +986,18 @@ This project is structured so that individual components can be replaced or exte
   `kinematics.py` centralises time-based derivatives. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
 
 - **Models**
+
   - `linear_sigma_model.py` implements a single, interpretable baseline.
     `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mappings strategies based on their sigma breakpoints and speed ranges.
   - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
 
--**Validation**
--The validation pipeline processes the raw .log files at `data/validation/raw` and creates the .csv files needed for the service.
+- **Validation**
 
-- Each runtime session from any chosen model would have 6 validation plots, one for each axis, to make it possible to validate the smoothing performance during runtime on any of the models.
-- The generated .csv files at `data/validation/simualte` can be utilzed to run offline simualtion on any `<model>_smoothing_sim.py`scripts. This allows direct comparison across the differnt models on the same shot.
-- The same files can be furhter utilized to provide direct comparison across the differnt environments on the same model.
+  - The validation pipeline processes the raw .log files at `data/validation/raw` and creates the .csv files needed for the service.
+
+  - Each runtime session from any chosen model would have 6 validation plots, one for each axis, to make it possible to validate the smoothing performance during runtime on any of the models.
+  - The generated .csv files at `data/validation/simualte` can be utilzed to run offline simualtion on any `<model>_smoothing_sim.py`scripts. This allows direct comparison across the differnt models on the same shot.
+  - The same files can be furhter utilized to provide direct comparison across the differnt environments on the same model.
 
 ---
 
