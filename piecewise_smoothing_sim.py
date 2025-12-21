@@ -360,7 +360,7 @@ def main() -> None:
         help="CSV with raw poses (default: data/processed/tracking_logs.csv)",
     )
     parser.add_argument(
-        "--derivatives",
+        "--derived",
         default="data/derived/tracking_derivatives.csv",
         help="CSV with dt and accelerations "
         "(default: data/derived/tracking_derivatives.csv)",
@@ -394,8 +394,8 @@ def main() -> None:
     print("[piecewise_smoothing_sim] Loading logs:", args.logs)
     logs_df = pd.read_csv(args.logs)
 
-    print("[piecewise_smoothing_sim] Loading derivatives:", args.derivatives)
-    drv_df = pd.read_csv(args.derivatives)
+    print("[piecewise_smoothing_sim] Loading derivatives:", args.derived)
+    drv_df = pd.read_csv(args.derived)
 
     if args.label not in logs_df["label"].unique():
         raise ValueError(f"Label '{args.label}' not found in logs CSV.")
