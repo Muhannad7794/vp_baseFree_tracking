@@ -856,7 +856,7 @@ output example:
 - `data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg`
 - `data/piecewise_plots/smoothing/piecewise_test_01_X_rot_piecewise.jpg`
 
-| linear test_01 (runtime) – Z_rot                                                             | piecewise test_01 (simulation) –Z_rot                                                               |
+| linear test_01 (runtime) – Z_rot                                                             | linear test_01 (piecewise simulation) –Z_rot                                                        |
 | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
 | ![linear_test_01(runtime)](data/validation/plots/linear_test_01_parsed/X_rot_validation.jpg) | ![piecewise_test_01(simulation)](data/piecewise_plots/smoothing/linear_test_01_X_rot_piecewise.jpg) |
 
@@ -883,7 +883,7 @@ output example:
 - `data/validation/plots/piecwise_test_01_parsed/Y_pose_validation.jpg`
 - `data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_piecewise.jpg`
 
-| piecewise test_01 (runtime) – Y_rot                                                                 | sigmoid test_01 (simulation) – Y_rot                                                              |
+| piecewise test_01 (runtime) – Y_rot                                                                 | piecewise test_01 (sigmoid simulation) – Y_rot                                                    |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | ![piecewise_test_01(runtime)](data/validation/plots/piecewise_test_01_parsed/Y_pose_validation.jpg) | ![sigmoid_test_01(simulation)](data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_sigmoid.jpg) |
 
@@ -891,7 +891,11 @@ output example:
 
 - These plots show -side by side- how a specific axis would behave in this shot if the sigmoid model was selected at runtime.
 
+---
+
 **Findings:** _The setup allows for accessing direct comparitive analysis between the different models, without the complexity and hassle of replicating the exact same physical camera movement for another test shot, which requires extensive setup and expensive machinery like advanced robotic arms._
+
+---
 
 #### 6.3.3 Mono-model Comparison
 
@@ -950,7 +954,11 @@ docker compose run --rm sigmoid \
 
 - The graph shows a side-by-side perfromance comparison of the sigmoid model across the runtime environment and the offline simulation.
 
+---
+
 **Findings:** _The similarity in both the computational and visual results asserts the models' stability across simulation and runtime.This proofs that even with external factors like signal delay, environmental changes during shooting, and others, the models are performing as expected._
+
+---
 
 #### 6.3.4 Conclusive Comparison
 
@@ -963,7 +971,7 @@ By launching the system with `docker compose up --build -d`, if there are any .l
 **What these plots show**
 
 - These plots are from differnt shots, each had a differnt model set at runtime.
-- No matter the chose model or the targeted axis, the validation plot provides those insightful plots, making it a robust and relible validation tool for any runtime session.
+- No matter the chosen model or the targeted axis, the validation pipeline provides those insightful plots, making it a robust and relible validation tool for any runtime session.
 
 ---
 
