@@ -883,7 +883,7 @@ output example:
 - `data/validation/plots/piecwise_test_01_parsed/Y_pose_validation.jpg`
 - `data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_piecewise.jpg`
 
-| piecewise test_01 (runtime) – Y_rot                                                                 | piecewise test_01 (sigmoid simulation) – Y_rot                                                    |
+| piecewise test_01 (runtime) – Y_pose                                                                | piecewise test_01 (sigmoid simulation) – Y_pose                                                   |
 | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
 | ![piecewise_test_01(runtime)](data/validation/plots/piecewise_test_01_parsed/Y_pose_validation.jpg) | ![sigmoid_test_01(simulation)](data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_sigmoid.jpg) |
 
