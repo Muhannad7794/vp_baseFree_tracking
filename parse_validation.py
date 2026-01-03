@@ -1,3 +1,4 @@
+# parse_validation.py
 import re
 from pathlib import Path
 import pandas as pd
@@ -22,11 +23,9 @@ def parse_log_file(file_path):
 
     parsed_rows = []
 
-    # Robust Regex
+    # Robust Regex to capture the CSV part after TRACKDATA
     regex_pattern = r"TRACKDATA.*?,(.*)"
-
     match_count = 0
-    error_count = 0
 
     with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
         for line in f:
@@ -64,23 +63,14 @@ def parse_log_file(file_path):
                             }
                             parsed_rows.append(row)
                             match_count += 1
-                        else:
-                            if error_count < 1:
-                                print(
-                                    f"    Skipping malformed line (len={len(parts)})..."
-                                )
-                            error_count += 1
-
-                    except ValueError as e:
-                        if error_count < 3:
-                            print(f"    Value Error: {e}")
-                        error_count += 1
+                    except ValueError:
+                        continue
 
     print(f"    Found {match_count} valid frames.")
     return pd.DataFrame(parsed_rows)
 
 
-def convert_to_simulation_format(df, filename_stem):
+def convert_to_simulation_format(df, original_filename):
     """
     Converts Validation DF -> Simulation Standard Format.
     """
@@ -88,15 +78,11 @@ def convert_to_simulation_format(df, filename_stem):
 
     for _, row in df.iterrows():
         label = row["Label"]
-        # Default scenario logic
-        scenario = label
-        take = 1
-
         sim_row = {
             "time": row["Time"],
             "label": label,
-            "scenario": scenario,
-            "take": take,
+            "scenario": label,  # Use label as scenario
+            "take": 1,  # Default to 1 as we split by file
             # Map Raw values to standard names
             "X_pose": row["X_pose_raw"],
             "Y_pose": row["Y_pose_raw"],
@@ -104,7 +90,7 @@ def convert_to_simulation_format(df, filename_stem):
             "X_rot": row["X_rot_raw"],
             "Y_rot": row["Y_rot_raw"],
             "Z_rot": row["Z_rot_raw"],
-            "file": filename_stem,
+            "file": original_filename,
         }
         sim_data.append(sim_row)
 
@@ -113,8 +99,7 @@ def convert_to_simulation_format(df, filename_stem):
 
 def calculate_derivatives_formatted(df):
     """
-    Calculates Velocity and Acceleration matching the specific naming convention
-    required by the simulation script: V_Axis, A_Axis
+    Calculates Velocity and Acceleration matching the naming convention.
     """
     df = df.sort_values("time").reset_index(drop=True)
 
@@ -122,7 +107,6 @@ def calculate_derivatives_formatted(df):
     df["dt"] = df["time"].diff().fillna(DT_DEFAULT)
     df["dt"] = df["dt"].replace(0, DT_DEFAULT)
 
-    # The axes we need to process
     axes = ["X_pose", "Y_pose", "Z_pose", "X_rot", "Y_rot", "Z_rot"]
 
     # Initialize result with metadata
@@ -137,14 +121,39 @@ def calculate_derivatives_formatted(df):
         acc = vel.diff() / df["dt"]
         acc = acc.fillna(0)
 
-        # 3. Add to results with correct prefix
+        # 3. Add to results
         results[f"V_{axis}"] = vel
         results[f"A_{axis}"] = acc
 
-        # Note: The simulation script calculates Sigma internally from A_Axis,
-        # or we can add it here if needed, but A_Axis is the strict requirement.
-
     return results
+
+
+def process_dataframe(df, base_filename, label_name):
+    """
+    Helper function to process and save a single dataframe group.
+    """
+    # Sanitize label for filename (remove spaces, slashes)
+    safe_label = "".join(c for c in label_name if c.isalnum() or c in ("_", "-"))
+
+    # Construct distinct filename: e.g. Node_0_Run01Linear
+    file_stem = f"{base_filename}_{safe_label}"
+
+    # 2. Save Validation CSV (Raw vs Smooth)
+    val_out_path = OUTPUT_DIR_VALIDATION / f"{file_stem}_parsed.csv"
+    df.to_csv(val_out_path, index=False)
+    print(f"    [VAL] Saved: {val_out_path.name}")
+
+    # 3. Convert to Sim Format (Raw only)
+    df_sim = convert_to_simulation_format(df, file_stem)
+    sim_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}.csv"
+    df_sim.to_csv(sim_out_path, index=False)
+    print(f"    [SIM] Saved: {sim_out_path.name}")
+
+    # 4. Calculate Derivatives (V_, A_)
+    df_derivs = calculate_derivatives_formatted(df_sim)
+    deriv_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}_derivatives.csv"
+    df_derivs.to_csv(deriv_out_path, index=False)
+    print(f"    [DRV] Saved: {deriv_out_path.name}")
 
 
 def main():
@@ -164,26 +173,22 @@ def main():
         return
 
     for log_file in log_files:
-        # 1. Parse log
-        df_val = parse_log_file(log_file)
+        # 1. Parse the full monolithic log
+        df_full = parse_log_file(log_file)
 
-        if df_val is not None and not df_val.empty:
-            # 2. Save Validation CSV (Raw vs Smooth)
-            val_out_path = OUTPUT_DIR_VALIDATION / f"{log_file.stem}_parsed.csv"
-            df_val.to_csv(val_out_path, index=False)
-            print(f"    [VAL] Saved: {val_out_path.name}")
+        if df_full is not None and not df_full.empty:
 
-            # 3. Convert to Sim Format (Raw only)
-            df_sim = convert_to_simulation_format(df_val, log_file.stem)
-            sim_out_path = OUTPUT_DIR_SIMULATION / f"{log_file.stem}.csv"
-            df_sim.to_csv(sim_out_path, index=False)
-            print(f"    [SIM] Saved: {sim_out_path.name}")
+            # --- NEW LOGIC: Split by Label ---
+            # Group the dataframe by the 'Label' column
+            grouped = df_full.groupby("Label")
 
-            # 4. Calculate Derivatives (V_, A_)
-            df_derivs = calculate_derivatives_formatted(df_sim)
-            deriv_out_path = OUTPUT_DIR_SIMULATION / f"{log_file.stem}_derivatives.csv"
-            df_derivs.to_csv(deriv_out_path, index=False)
-            print(f"    [DRV] Saved: {deriv_out_path.name}")
+            print(
+                f"    -> splitting '{log_file.name}' into {len(grouped)} separate datasets..."
+            )
+
+            for label_name, df_group in grouped:
+                # Process each group as if it were a separate file
+                process_dataframe(df_group, log_file.stem, str(label_name))
 
             print("-" * 30)
         else:

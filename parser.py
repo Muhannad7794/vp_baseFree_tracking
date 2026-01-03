@@ -1,4 +1,4 @@
-# parse_logs.py
+# parser.py
 from pathlib import Path
 import re
 import pandas as pd
@@ -8,8 +8,10 @@ LOG_DIR = Path("data/raw")
 
 # Output CSV to data/processed/tracking_logs.csv
 OUTPUT_CSV = LOG_DIR.parent / "processed" / "tracking_logs.csv"
-# Scenario base names (file stems and label prefixes)
-SCENARIO_BASES = [
+
+# Valid Training Scenarios
+# We use this to filter the *content* of the logs, not the filenames.
+VALID_SCENARIO_PREFIXES = [
     "controlled_handheld_pan",
     "controlled_handheld_tilt",
     "controlled_on_tripod_pan",
@@ -27,13 +29,6 @@ SCENARIO_BASES = [
 def parse_track_line(line: str):
     """
     Parse each UE log line that contains TRACKDATA.
-
-    to match the blueprint structure:
-      "TRACKDATA","<time>","<label>",
-      "<X_pose>","<Y_pose>","<Z_pose>",
-      "<X_rot>","<Y_rot>","<Z_rot>"\n
-
-    i.e. one time value, then label, then 6 DOF.
     """
     if "TRACKDATA" not in line:
         return None
@@ -62,7 +57,6 @@ def parse_track_line(line: str):
                 time_val = float(s)
                 continue
             except ValueError:
-                # If time doesn't parse, skip line
                 return None
 
         # Next token is label (string)
@@ -70,11 +64,10 @@ def parse_track_line(line: str):
             label = s
             continue
 
-        # all remaining tokens should be numeric values (6 DOF)
+        # Remaining tokens should be numeric values (6 DOF)
         try:
             numeric_vals.append(float(s))
         except ValueError:
-            # Ignore any stray non-numeric junk
             continue
 
     # Expect exactly 6 numeric values for 6 DOF
@@ -84,13 +77,14 @@ def parse_track_line(line: str):
     X_pose, Y_pose, Z_pose, X_rot, Y_rot, Z_rot = numeric_vals
 
     # Derive scenario + take from label, e.g. "fast_pan_tripod_01"
-    m = re.match(r"(.+)_0*(\d+)$", label)
+    # Logic: Strip the trailing digits to find the scenario name
+    m = re.match(r"(.+?)_?0*(\d+)$", label)
     if m:
         scenario = m.group(1)
         take = int(m.group(2))
     else:
         scenario = label
-        take = None
+        take = 1  # Default to take 1 if no number found
 
     return {
         "time": time_val,
@@ -109,30 +103,48 @@ def parse_track_line(line: str):
 def main():
     rows = []
 
-    # Process both .log and .txt files under ./data
-    for pattern in ("*.log", "*.txt"):
-        for file_path in LOG_DIR.glob(pattern):
-            stem = file_path.stem
+    # Process all .log and .txt files under ./data/raw
+    # We no longer filter files by name, so we can support monolithic session logs.
+    files = list(LOG_DIR.glob("*.log")) + list(LOG_DIR.glob("*.txt"))
 
-            # Only take files that match the scenario bases
-            if not any(stem.startswith(base) for base in SCENARIO_BASES):
-                continue
+    if not files:
+        print(f"No log files found in {LOG_DIR}")
+        return
 
-            print(f"Parsing {file_path.name} ...")
+    print(f"Scanning {len(files)} files in {LOG_DIR}...")
 
-            with file_path.open(encoding="utf-8", errors="ignore") as f:
-                for line in f:
-                    if "TRACKDATA" not in line:
-                        continue
-                    row = parse_track_line(line)
-                    if row is None:
-                        continue
-                    row["file"] = stem
-                    rows.append(row)
+    for file_path in files:
+        file_row_count = 0
+        stem = file_path.stem
+
+        with file_path.open(encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                if "TRACKDATA" not in line:
+                    continue
+
+                row = parse_track_line(line)
+                if row is None:
+                    continue
+
+                # Filter: Only keep rows where the internal label matches our training set
+                # This prevents random test labels (like "Test_Run_01") from polluting the training data
+                if not any(
+                    row["scenario"].startswith(base) for base in VALID_SCENARIO_PREFIXES
+                ):
+                    continue
+
+                row["file"] = stem
+                rows.append(row)
+                file_row_count += 1
+
+        if file_row_count > 0:
+            print(
+                f"  -> Extracted {file_row_count} valid training samples from {file_path.name}"
+            )
 
     if not rows:
         raise RuntimeError(
-            "No TRACKDATA rows found. Check data/ and scenario file names."
+            "No valid TRACKDATA rows found. Check your log files and label names."
         )
 
     df = pd.DataFrame(rows)
@@ -144,7 +156,7 @@ def main():
     OUTPUT_CSV.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(OUTPUT_CSV, index=False)
 
-    print(f"Saved {len(df)} rows to {OUTPUT_CSV}")
+    print(f"\nSuccess! Saved {len(df)} total rows to {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":
