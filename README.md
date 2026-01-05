@@ -909,10 +909,10 @@ output example:
 ```bash
 docker compose run --rm piecewise \
   python piecewise_smoothing_sim.py \
-      --logs data/validation/simulate/piecewise_test_01.csv \
-      --derived data/validation/simulate/piecewise_test_01_derivatives.csv \
+      --logs data/validation/simulate/piecewise_test_01_piecewise_test_01.csv \
+      --derived data/validation/simulate/piecewise_test_01_piecewise_test_01_derivatives.csv \
       --config data/config/piecewise_sigma_ranges.json \
-      --axis X_rot \
+      --axis Z_rot \
       --label piecewise_test_01
 ```
 
@@ -936,8 +936,8 @@ output example:
 ```bash
 docker compose run --rm sigmoid \
   python sigmoid_smoothing_sim.py \
-      --logs data/validation/simulate/sigmoid_test_01.csv \
-      --derived data/validation/simulate/sigmoid_test_01_derivatives.csv \
+      --logs data/validation/simulate/sigmoid_test_01_sigmoid_test_01.csv \
+      --derived data/validation/simulate/sigmoid_test_01_sigmoid_test_01_derivatives.csv \
       --config data/config/sigmoid_sigma_ranges.json \
       --axis Z_pose \
       --label sigmoid_test_01
