@@ -781,6 +781,7 @@ Output example:
   - Compute rolling σ with a fixed window size.
   - Map σ to InterpSpeed using pre-computed bounds.
   - Apply FInterpTo each frame.
+- The implemented functionality to calculate the average speed on the positional axes was utilized to update the shader material of the scanned object "the duck" dynamically. This fulfills the requirements of the shader programming task and extends the work applied on the visualization task.
 
 ---
 
