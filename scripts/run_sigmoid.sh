@@ -10,4 +10,4 @@ python kinematics.py
 echo "[run_sigmoid] Step 3/3: sigmoid sigma model -> extend derivatives + config JSON"
 python sigmoid_sigma_model.py
 
-echo "[run_linear] All steps finished."
+echo "[run_sigmoid] All steps finished."
