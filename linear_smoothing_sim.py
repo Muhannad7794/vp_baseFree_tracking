@@ -342,12 +342,12 @@ def main():
     parser.add_argument(
         "--label",
         type=str,
-        help="Exact label (e.g. StillOnTripod_01) to simulate",
+        help="Exact label (e.g. still_on_tripod_01) to simulate",
     )
     parser.add_argument(
         "--scenario",
         type=str,
-        help="Scenario name (e.g. StillOnTripod). Used with --take if --label not given.",
+        help="Scenario name (e.g. still_on_tripod). Used with --take if --label not given.",
     )
     parser.add_argument(
         "--take",

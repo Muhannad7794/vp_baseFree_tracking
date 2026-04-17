@@ -4,7 +4,7 @@ import re
 import pandas as pd
 
 # Directory with your per-scenario log/text files
-LOG_DIR = Path("data/raw")
+LOG_DIR = Path("data/new_rig_raw")
 
 # Output CSV to data/processed/tracking_logs.csv
 OUTPUT_CSV = LOG_DIR.parent / "processed" / "tracking_logs.csv"
@@ -21,7 +21,7 @@ VALID_SCENARIO_PREFIXES = [
     "handheld_full_nav",
     "handheld_still",
     "slide_handheld",
-    "StillOnTripod",
+    "still_on_tripod",
     "travel_handheld",
 ]
 

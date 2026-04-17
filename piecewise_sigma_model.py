@@ -25,7 +25,7 @@ import matplotlib.pyplot as plt
 
 GROUPS = {
     "static": [
-        "StillOnTripod",
+        "still_on_tripod",
         "handheld_still",
     ],
     "slow_tripod": [
@@ -290,7 +290,7 @@ def plot_sigma_bar_by_scenario(
     out_path = os.path.join(output_dir, f"sigma_bar_{axis}_piecewise.jpg")
 
     scenario_order = [
-        "StillOnTripod",
+        "still_on_tripod",
         "handheld_still",
         "controlled_on_tripod_pan",
         "controlled_on_tripod_tilt",

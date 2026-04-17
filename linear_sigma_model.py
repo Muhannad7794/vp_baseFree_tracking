@@ -16,7 +16,7 @@ ALL_AXES: List[str] = POS_AXES + ROT_AXES
 
 # Scenario groupings:
 STABLE_SCENARIOS = [
-    "StillOnTripod",
+    "still_on_tripod",
     "handheld_still",
 ]
 
@@ -276,7 +276,7 @@ def plot_sigma_bar_by_scenario(
     out_path = os.path.join(output_dir, f"sigma_bar_{axis}.jpg")
 
     scenario_order = [
-        "StillOnTripod",
+        "still_on_tripod",
         "handheld_still",
         "controlled_on_tripod_pan",
         "controlled_on_tripod_tilt",

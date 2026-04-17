@@ -80,7 +80,6 @@ At the top level you should see something close to:
 
 - **`kinematics.py`**
   Reads `tracking_logs.csv`, computes:
-
   - `dt` (frame-to-frame time difference),
   - velocity per axis (`V_X_pose`, …, `V_Z_rot`),
   - acceleration per axis (`A_X_pose`, …, `A_Z_rot`),
@@ -90,10 +89,8 @@ At the top level you should see something close to:
 #### Models and simulation files:
 
 - **_Linear_**:
-
   - **`linear_sigma_model.py`**
     Implements the sigma-based model:
-
     - computes rolling standard deviation of acceleration (`sigma_*`),
     - calibrates per-axis `min_sigma` / `max_sigma` from labelled scenarios,
     - maps `sigma` → `InterpSpeed_*` with a linear inverse mapping,
@@ -103,7 +100,6 @@ At the top level you should see something close to:
 
   - **`linear_smoothing_sim.py`**
     Replays a single take and axis and applies the same logic that will be used in Unreal:
-
     - recomputes rolling `sigma` online,
     - looks up model parameters from
 
@@ -112,9 +108,7 @@ At the top level you should see something close to:
     - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
 
 - **_Piecewise_**:
-
   - **`piecewise_sigma_model.py`**
-
     - computes rolling σ per axis and calibrates
       piecewise σ-breaks from the scenario groups _static / slow tripod / controlled handheld / medium / fast_.
     - writes the extended table to `data/modeled/tracking_modelled_sigma_piecewise.csv`,
@@ -125,9 +119,7 @@ At the top level you should see something close to:
     Plots go to `data/piecewise_plots/smoothing/`.
 
 - **_Sigmoid_**:
-
   - **`sigmoid_sigma_model.py`**
-
     - computes rolling σ per axis and calibrates
       sigmoid inflection points from the scenario groups _static / slow tripod / controlled handheld / medium / fast_.
     - writes the extended table to `data/modeled/tracking_modelled_sigma_sigmoid.csv`,
@@ -140,7 +132,6 @@ At the top level you should see something close to:
 #### Validation files:
 
 - **`parse_validation.py`**
-
   - Parses raw Unreal log or text files from `data/validation/raw/`,
   - extracts the lines produced by the logging blueprint,
   - writes clean tables to `data/validation/processed/`.
@@ -172,8 +163,8 @@ The expected columns are:
 
 ```text
 time        # float, game time in seconds since start of take
-label       # string, e.g. 'StillOnTripod_01'
-scenario    # string, e.g. 'StillOnTripod', 'fast_pan_tripod'
+label       # string, e.g. 'still_on_tripod_01'
+scenario    # string, e.g. 'still_on_tripod', 'fast_pan_tripod'
 take        # int, take number within the scenario
 X_pose      # float, position X
 Y_pose      # float, position Y
@@ -346,17 +337,17 @@ docker compose run --rm linear \
 Output example (saved as JPG):
 
 - `data/plots/kinematics/handheld_full_nav_01_X_pose.jpg`
-- `data/plots/kinematics/StillOnTripod_01_X_pose.jpg` (from a similar command with `--plot-label StillOnTripod_01`)
+- `data/plots/kinematics/still_on_tripod_01_X_pose.jpg` (from a similar command with `--plot-label still_on_tripod_01`)
 
-| handheld_full_nav_01 – X_pose                                                         | StillOnTripod_01 – X_pose                                                     |
-| ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| ![handheld_full_nav_01_X_pose](data/plots/kinematics/handheld_full_nav_01_X_pose.jpg) | ![StillOnTripod_01_X_pose](data/plots/kinematics/StillOnTripod_01_X_pose.jpg) |
+| handheld_full_nav_01 – X_pose                                                         | still_on_tripod_01 – X_pose                                                       |
+| ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| ![handheld_full_nav_01_X_pose](data/plots/kinematics/handheld_full_nav_01_X_pose.jpg) | ![still_on_tripod_01_X_pose](data/plots/kinematics/still_on_tripod_01_X_pose.jpg) |
 
 **What these plots show**
 
 - The top line is the **position** along X; the lower lines show **velocity** and **acceleration** for the same axis.
 - In a **handheld full navigation** take, position drifts slowly while velocity and acceleration show noticeable variation – the camera is moving through space.
-- In a **StillOnTripod** take, position is essentially flat and both velocity and acceleration stay near zero, with only small residual noise.
+- In a **still_on_tripod** take, position is essentially flat and both velocity and acceleration stay near zero, with only small residual noise.
 
 This visualises how derivatives emphasise motion behaviour, not absolute position.
 
@@ -380,11 +371,11 @@ docker compose run --rm linear \
 Output example:
 
 - `data/plots/kinematics_scenarios/handheld_still_X_pose.jpg`
-- `data/plots/kinematics_scenarios/StillOnTripod_X_pose.jpg` (from `--plot-scenario StillOnTripod`)
+- `data/plots/kinematics_scenarios/still_on_tripod_X_pose.jpg` (from `--plot-scenario still_on_tripod`)
 
-| handheld_still – X_pose (all takes)                                                 | StillOnTripod – X_pose (all takes)                                                |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| ![handheld_still_X_pose](data/plots/kinematics_scenarios/handheld_still_X_pose.jpg) | ![StillOnTripod_X_pose](data/plots/kinematics_scenarios/StillOnTripod_X_pose.jpg) |
+| handheld_still – X_pose (all takes)                                                 | still_on_tripod – X_pose (all takes)                                                  |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| ![handheld_still_X_pose](data/plots/kinematics_scenarios/handheld_still_X_pose.jpg) | ![still_on_tripod_X_pose](data/plots/kinematics_scenarios/still_on_tripod_X_pose.jpg) |
 
 **What these plots show**
 
@@ -495,16 +486,13 @@ Output example:
 Each figure has three parts:
 
 1. **Raw vs smoothed motion over time**
-
    - The orange smoothed curve follows the blue raw curve but removes high-frequency oscillations.
 
 2. **Jitter metric before and after**
-
    - Bars show the RMS of frame-to-frame differences.
    - A lower value after smoothing indicates reduced jitter; in fast tilt, jitter drops significantly.
 
 3. **Difference and lag estimate**
-
    - The bottom plot shows `smoothed - raw` over time, with an estimated lag in ms.
    - Fast tilt exhibits more jitter reduction and a small lag (~100 ms); fast pan shows less change and almost zero lag.
 
@@ -730,19 +718,16 @@ Output example:
 **What these plots show**
 
 - ### Linear Model:
-
   - The linear mapping is conservative. It reduces jitter a bit, but it is clearly prioritising responsiveness by remaining very close to the raw signal.
   - The model is a good "safe default". It does not affect the signal much. It applies small corrections when the motion is very jittery. Otherwise, it remains very close to the raw signal.
   - This makes the model very useful in certain use cases, where simple jitter reduction is desired, while responsiveness is of highest priority.
 
 - ### Piecewise Model:
-
   - The piecewise mapping is more aggressive generally -as shown in this sequence- It removes more high-frequency energy while still keeping the signal aligned in time.
   - The model is a "strong stabilizer". It applies larger level of smoothness, and is more sensitive to jitter variations, thanks to the multiple breakpoints.
   - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
 
 - ### Sigmoid Model:
-
   - The sigmoid mapping is somewhere in between the linear and piecewise models. It is the none liener model among the three.
   - It sits -both conceptually and in practice- between the linear and piecewise models.
   - like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the steps between those two ends is non-linear, following a sigmoid curve.
@@ -751,7 +736,6 @@ Output example:
   - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
 
 - ### Comparitive Analysis:
-
   - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
 
   - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
@@ -987,13 +971,11 @@ This project is structured so that individual components can be replaced or exte
   `kinematics.py` centralises time-based derivatives. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
 
 - **Models**
-
   - `linear_sigma_model.py` implements a single, interpretable baseline.
     `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mappings strategies based on their sigma breakpoints and speed ranges.
   - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
 
 - **Validation**
-
   - The validation pipeline processes the raw .log files at `data/validation/raw` and creates the .csv files needed for the service.
 
   - Each runtime session from any chosen model would have 6 validation plots, one for each axis, to make it possible to validate the smoothing performance during runtime on any of the models.
