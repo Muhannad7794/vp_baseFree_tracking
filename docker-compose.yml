@@ -27,6 +27,14 @@ services:
       - ./data:/vp_basefree_tracking_dockerized/data
     command: ["bash", "scripts/run_sigmoid.sh"]
 
+  one_euro:
+    build: .
+    container_name: tracking-one-euro
+    working_dir: /vp_basefree_tracking_dockerized
+    volumes:
+      - ./data:/vp_basefree_tracking_dockerized/data
+    command: ["bash", "scripts/run_one_euro.sh"]
+
   validation:
     build: .
     container_name: tracking-validation

@@ -63,8 +63,9 @@ def process_file(csv_path):
     # Safety: Fix zero or negative time deltas (logging artifacts)
     dt = np.maximum(dt, 1e-3)
 
-    # Create subfolder
-    session_plot_dir = OUTPUT_PLOT_DIR / csv_path.stem
+    # Create subfolder — strip the _parsed suffix added by parse_validation.py
+    session_name = csv_path.stem.removesuffix("_parsed")
+    session_plot_dir = OUTPUT_PLOT_DIR / session_name
     session_plot_dir.mkdir(parents=True, exist_ok=True)
 
     for axis in AXES_TO_PLOT:
@@ -95,7 +96,7 @@ def process_file(csv_path):
         ax1 = plt.subplot(3, 1, 1)
         ax1.plot(t, y_raw, label="Raw", color="tab:red", linewidth=1)
         ax1.plot(t, y_smooth_aligned, label="Smoothed", color="tab:green", linewidth=1)
-        ax1.set_title(f"{csv_path.stem} - {axis}: Raw vs Smoothed")
+        ax1.set_title(f"{session_name} - {axis}: Raw vs Smoothed")
         ax1.set_ylabel("Amplitude")
         ax1.legend()
 

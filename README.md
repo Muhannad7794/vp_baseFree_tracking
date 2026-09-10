@@ -776,7 +776,7 @@ Unlike the simulation pipeline, the bash script running the validation service t
 **Command**
 
 ```bash
-docker compose run --rm validattion\
+docker compose run --rm validation\
     python validator.py\
         --file data/validation/raw/<log_file>.log
 ```
@@ -805,11 +805,11 @@ docker compose run --rm validattion\
 
 **_Example:_**
 
-- `data/validation/plots/linear_test_01_linear_test_01_parsed/X_rot_validation.jpg`
+- `data/validation/plots/linear_test_01/X_rot_validation.jpg`
 
 | linear test_01 (runtime) – Y_pose                                                                           |
 | ----------------------------------------------------------------------------------------------------------- |
-| ![linear_test_01(runtime)](data/validation/plots/linear_test_01_linear_test_01_parsed/X_rot_validation.jpg) |
+| ![linear_test_01(runtime)](data/validation/plots/linear_test_01/X_rot_validation.jpg) |
 
 **What these plots show**
 
@@ -829,8 +829,8 @@ docker compose run --rm validattion\
 ```bash
 docker compose run --rm piecewise \
   python piecewise_smoothing_sim.py \
-      --logs data/validation/simulate/linear_test_01.csv \
-      --derived data/validation/simulate/linear_test_01_derivatives.csv \
+      --logs data/validation/simulate/linear_test_01_sim.csv \
+      --derived data/validation/simulate/linear_test_01_sim_derivatives.csv \
       --config data/config/piecewise_sigma_ranges.json \
       --axis X_rot \
       --label linear_test_01
@@ -838,12 +838,12 @@ docker compose run --rm piecewise \
 
 output example:
 
-- `data/validation/plots/linear_test_01_linear_test_01_parsed/X_rot_validation.jpg`
-- `data/piecewise_plots/smoothing/piecewise_test_01_X_rot_piecewise.jpg`
+- `data/validation/plots/raw_nav/X_rot_validation.jpg`
+- `data/piecewise_plots/smoothing/raw_nav_X_rot_piecewise.jpg`
 
 | linear test_01 (runtime) – Z_rot                                                                            | linear test_01 (piecewise simulation) –Z_rot                                                        |
 | ----------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| ![linear_test_01(runtime)](data/validation/plots/linear_test_01_linear_test_01_parsed/X_rot_validation.jpg) | ![piecewise_test_01(simulation)](data/piecewise_plots/smoothing/linear_test_01_X_rot_piecewise.jpg) |
+| ![linear_test_01(runtime)](data/validation/plots/raw_nav/X_rot_validation.jpg) | ![piecewise_test_01(simulation)](data/piecewise_plots/smoothing/raw_nav_X_rot_piecewise.jpg) |
 
 **What these plots show**
 
@@ -856,21 +856,21 @@ output example:
 ```bash
 docker compose run --rm sigmoid \
   python sigmoid_smoothing_sim.py \
-      --logs data/validation/simulate/piecewise_test_01.csv \
-      --derived data/validation/simulate/piecewise_test_01_derivatives.csv \
+      --logs data/validation/simulate/raw_nav_sim.csv \
+      --derived data/validation/simulate/raw_nav_sim_derivatives.csv \
       --config data/config/sigmoid_sigma_ranges.json \
       --axis Y_pose \
-      --label piecewise_test_01
+      --label raw_nav
 ```
 
 output example:
 
-- `data/validation/plots/piecewise_test_01_piecewise_tested_01_parsed/Y_pose_validation.jpg`
-- `data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_piecewise.jpg`
+- `data/validation/plots/raw_nav/Y_pose_validation.jpg`
+- `data/sigmoid_plots/smoothing/raw_nav_Y_pose_sigmoid.jpg`
 
-| piecewise test_01 (runtime) – Y_pose                                                                                  | piecewise test_01 (sigmoid simulation) – Y_pose                                                   |
+| raw_nav (runtime) – Y_pose                                                                                  | raw_nav (sigmoid simulation) – Y_pose                                                   |
 | --------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| ![piecewise_test_01(runtime)](data/validation/plots/piecewise_test_01_piecewise_test_01_parsed/Y_pose_validation.jpg) | ![sigmoid_test_01(simulation)](data/sigmoid_plots/smoothing/piecewise_test_01_Y_pose_sigmoid.jpg) |
+| ![raw_nav(runtime)](data/validation/plots/raw_nav/Y_pose_validation.jpg) | ![raw_nav(sigmoid simulation)](data/sigmoid_plots/smoothing/raw_nav_Y_pose_sigmoid.jpg) |
 
 **What these plots show**
 
@@ -894,8 +894,8 @@ output example:
 ```bash
 docker compose run --rm piecewise \
   python piecewise_smoothing_sim.py \
-      --logs data/validation/simulate/piecewise_test_01_piecewise_test_01.csv \
-      --derived data/validation/simulate/piecewise_test_01_piecewise_test_01_derivatives.csv \
+      --logs data/validation/simulate/piecewise_test_01_sim.csv \
+      --derived data/validation/simulate/piecewise_test_01_sim_derivatives.csv \
       --config data/config/piecewise_sigma_ranges.json \
       --axis Z_rot \
       --label piecewise_test_01
@@ -903,12 +903,12 @@ docker compose run --rm piecewise \
 
 output example:
 
-- `data/validation/plots/piecewise_test_01_piecewise_test_01_parsed/Z_rot_validation.jpg`
+- `data/validation/plots/piecewise_test_01/Z_rot_validation.jpg`
 - `data/piecewise_plots/smoothing/piecewise_test_01_Z_rot_piecewise.jpg`
 
 | piecewise test_01 (runtime) – Z_rot                                                                                  | piecewise test_01 (simulation) –Z_rot                                                                  |
 | -------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01_piecewise_test_01_parsed/Z_rot_validation.jpg) | ![piecewise test_01(simulation)](data/piecewise_plots/smoothing/piecewise_test_01_Z_rot_piecewise.jpg) |
+| ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01/Z_rot_validation.jpg) | ![piecewise test_01(simulation)](data/piecewise_plots/smoothing/piecewise_test_01_Z_rot_piecewise.jpg) |
 
 **What these plots show**
 
@@ -921,19 +921,19 @@ output example:
 ```bash
 docker compose run --rm sigmoid \
   python sigmoid_smoothing_sim.py \
-      --logs data/validation/simulate/sigmoid_test_01_sigmoid_test_01.csv \
-      --derived data/validation/simulate/sigmoid_test_01_sigmoid_test_01_derivatives.csv \
+      --logs data/validation/simulate/sigmoid_test_01_sim.csv \
+      --derived data/validation/simulate/sigmoid_test_01_sim_derivatives.csv \
       --config data/config/sigmoid_sigma_ranges.json \
       --axis Z_pose \
       --label sigmoid_test_01
 ```
 
-- `data/validation/plots/sigmoid_test_01_sigmoid_test_01_parsed/Z_pose_validation.jpg`
+- `data/validation/plots/sigmoid_test_01/Z_pose_validation.jpg`
 - `data/sigmoid_plots/smoothing/sigmoid_test_01_Z_pose_sigmoid.jpg`
 
 | sigmoid test_01 (runtime) – Z_pose                                                                              | sigmoid test_01 (simulation) –Z_pose                                                            |
 | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01_sigmoid_test_01_parsed/Z_pose_validation.jpg) | ![sigmoid test_01(simulation)](data/sigmoid_plots/smoothing/sigmoid_test_01_Z_pose_sigmoid.jpg) |
+| ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01/Z_pose_validation.jpg) | ![sigmoid test_01(simulation)](data/sigmoid_plots/smoothing/sigmoid_test_01_Z_pose_sigmoid.jpg) |
 
 **What these plots show**
 
@@ -951,7 +951,7 @@ By launching the system with `docker compose up --build -d`, if there are any .l
 
 | Linear test_01 (runtime) – X_rot                                                                            | Piecewise test_01 (runtime) – X_rot                                                                                  | Sigmoid test_01 (runtime) – X_rot                                                                              |
 | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| ![linear test_01(runtime)](data/validation/plots/linear_test_01_linear_test_01_parsed/X_rot_validation.jpg) | ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01_piecewise_test_01_parsed/X_rot_validation.jpg) | ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01_sigmoid_test_01_parsed/X_rot_validation.jpg) |
+| ![linear test_01(runtime)](data/validation/plots/linear_test_01/X_rot_validation.jpg) | ![piecewise test_01(runtime)](data/validation/plots/piecewise_test_01/X_rot_validation.jpg) | ![sigmoid test_01(runtime)](data/validation/plots/sigmoid_test_01/X_rot_validation.jpg) |
 
 **What these plots show**
 

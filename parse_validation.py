@@ -132,11 +132,9 @@ def process_dataframe(df, base_filename, label_name):
     """
     Helper function to process and save a single dataframe group.
     """
-    # Sanitize label for filename (remove spaces, slashes)
-    safe_label = "".join(c for c in label_name if c.isalnum() or c in ("_", "-"))
-
-    # Construct distinct filename: e.g. Node_0_Run01Linear
-    file_stem = f"{base_filename}_{safe_label}"
+    # The log file stem is the single source of truth for all output names.
+    # The label inside the log is stored in the data but does not affect filenames.
+    file_stem = base_filename
 
     # 2. Save Validation CSV (Raw vs Smooth)
     val_out_path = OUTPUT_DIR_VALIDATION / f"{file_stem}_parsed.csv"
@@ -145,13 +143,13 @@ def process_dataframe(df, base_filename, label_name):
 
     # 3. Convert to Sim Format (Raw only)
     df_sim = convert_to_simulation_format(df, file_stem)
-    sim_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}.csv"
+    sim_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}_sim.csv"
     df_sim.to_csv(sim_out_path, index=False)
     print(f"    [SIM] Saved: {sim_out_path.name}")
 
     # 4. Calculate Derivatives (V_, A_)
     df_derivs = calculate_derivatives_formatted(df_sim)
-    deriv_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}_derivatives.csv"
+    deriv_out_path = OUTPUT_DIR_SIMULATION / f"{file_stem}_sim_derivatives.csv"
     df_derivs.to_csv(deriv_out_path, index=False)
     print(f"    [DRV] Saved: {deriv_out_path.name}")
 
