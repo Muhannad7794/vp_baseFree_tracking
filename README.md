@@ -1,7 +1,7 @@
 # Adaptive Smoothing for Portable Camera Tracking – Analysis and Modelling Pipeline
 
 This repository contains the analysis and modelling pipeline for an adaptive camera-motion smoothing system.  
-The system learns axis-wise motion statistics from recorded tracking data and uses them to drive a sigma-based interpolation model that can later be implemented in Unreal Engine or as a C++ plugin.
+The system learns axis-wise motion statistics from recorded tracking data and uses them to drive smoothing models that can later be implemented in Unreal Engine or as a C++ plugin.
 
 The repo is designed to be:
 
@@ -27,6 +27,8 @@ At the top level you should see something close to:
 ├── piecewise_smoothing_sim.py     # offline simulation using piecewise model
 ├── sigmoid_sigma_model.py         # rolling σ + sigmoid inverse mapping per axis
 ├── sigmoid_smoothing_sim.py       # offline simulation using sigmoid model
+├── one_euro_filter_model.py       # velocity distribution analysis + One Euro filter config
+├── one_euro_smoothing_sim.py      # offline simulation using the One Euro filter
 ├── README.md
 ├── parse_validation.py            # Parses the validation raw .log files into csv
 ├── validator.py                   # validates the smoothing results from UE runtime
@@ -39,10 +41,12 @@ At the top level you should see something close to:
     │   └── tracking_modelled_sigma.csv
     │   └── tracking_modelled_sigma_piecewise.csv
     │   └── tracking_modelled_sigma_sigmoid.csv
+    │   └── one_euro_modeled.csv
     ├── config/       # configuration JSONs per model
     │   └── linear_sigma_ranges.json    # σ ranges + speed bounds per axis (linear)
     │   └── piecewise_sigma_ranges.json # σ breaks + speed levels per axis (piecewise)
     │   └── sigmoid_sigma_ranges.json   # σ ranges + speed bounds per axis (sigmoid)
+    │   └── one_euro_params.json        # fc_min, beta, d_cutoff + velocity stats per axis
     └── plots/
     │   ├── kinematics/
     │   ├── kinematics_scenarios/
@@ -56,6 +60,9 @@ At the top level you should see something close to:
     └── sigmoid_plots/
     │   ├── sigmoid_model_scenarios/
     │   ├── sigmoid_model_sigma_bars/
+    │   └── smoothing/
+    └── one_euro_plots/
+    │   ├── analysis/
     │   └── smoothing/
     ├── validation/
     │   ├── raw/           # raw .log files from UE runtime
@@ -71,7 +78,7 @@ At the top level you should see something close to:
   Defines a minimal Python image with the dependencies needed to run the pipeline.
 
 - **`docker-compose.yml`**
-  Wraps the image into a service called `analysis`, mounts the `data/` folder from the host into the container, and sets the working directory and default command.
+  Wraps the image into named services, mounts the `data/` folder from the host into the container, and sets the working directory and default command for each service.
 
 #### Data processing and feature engineering files:
 
@@ -83,7 +90,7 @@ At the top level you should see something close to:
   - `dt` (frame-to-frame time difference),
   - velocity per axis (`V_X_pose`, …, `V_Z_rot`),
   - acceleration per axis (`A_X_pose`, …, `A_Z_rot`),
-    and writes them to `data/derived/tracking_derivatives.csv`.
+    using a causal backward-difference scheme, and writes them to `data/derived/tracking_derivatives.csv`.
     It also provides plotting utilities for position / velocity / acceleration.
 
 #### Models and simulation files:
@@ -101,9 +108,7 @@ At the top level you should see something close to:
   - **`linear_smoothing_sim.py`**
     Replays a single take and axis and applies the same logic that will be used in Unreal:
     - recomputes rolling `sigma` online,
-    - looks up model parameters from
-
-  - **`linear_sigma_ranges.json`**
+    - looks up model parameters from `linear_sigma_ranges.json`,
     - applies an FInterpTo-style smoothing step frame by frame,
     - generates plots showing raw vs smoothed motion, jitter reduction, and lag.
 
@@ -129,15 +134,30 @@ At the top level you should see something close to:
     sigmoid mapping, then plots raw vs smoothed motion, jitter reduction and lag.
     Plots go to `data/sigmoid_plots/smoothing/`.
 
+- **_One Euro_**:
+  - **`one_euro_filter_model.py`**
+    Implements the One Euro velocity-adaptive filter:
+    - analyses per-axis velocity distributions across scenario groups from `tracking_derivatives.csv`,
+    - runs the filter forward across the full dataset with the configured parameters,
+    - computes per-axis jitter and lag metrics to validate parameter choices,
+    - writes the filtered output to `data/modeled/one_euro_modeled.csv`,
+    - writes configuration to `data/config/one_euro_params.json`,
+    - includes plotting utilities for velocity distributions and filtered overviews.
+
+  - **`one_euro_smoothing_sim.py`** – replays a single take and axis using the One Euro
+    filter frame by frame, applying per-axis parameters from `one_euro_params.json`.
+    Handles Euler-angle unwrapping on rotation axes before filtering and wraps output back
+    to (−180, 180] degrees. Plots go to `data/one_euro_plots/smoothing/`.
+
 #### Validation files:
 
 - **`parse_validation.py`**
   - Parses raw Unreal log or text files from `data/validation/raw/`,
   - extracts the lines produced by the logging blueprint,
   - writes clean tables to `data/validation/processed/`.
-  - writes a 6DOF version of the processes csv to `data/validation/simualte/`.
+  - writes a 6DOF version of the processed csv to `data/validation/simualte/`.
     The generated file would be used to compute kinematics.
-  - writes derived kinematics from the processed csv to `data/validation/simualte/`. The The generated file would be used in the simulation pipeline.
+  - writes derived kinematics from the processed csv to `data/validation/simualte/`. The generated file would be used in the simulation pipeline.
 
 - **`validation.py`**
   - compares the raw and smoothed trajectories,
@@ -268,6 +288,29 @@ Running the full pipeline produces:
   }
   ```
 
+- `data/config/one_euro_params.json`
+  Per-axis filter parameters and velocity statistics for the One Euro filter.
+
+  ```json
+  {
+    "model": "one_euro",
+    "axes": {
+      "X_pose": {
+        "fc_min": ...,
+        "beta": ...,
+        "d_cutoff": ...,
+        "velocity_p90_stable": ...,
+        "velocity_p90_fast": ...,
+        "jitter_raw": ...,
+        "jitter_filtered": ...,
+        "jitter_reduction_x": ...,
+        "lag_samples": ...
+      },
+      ...
+    }
+  }
+  ```
+
 ---
 
 ## 3. Getting it to run on another machine
@@ -289,7 +332,7 @@ From the repo root:
 docker compose up --build -d
 
 # 2) Run the default pipeline inside the container
-docker compose run --rm linear (or sigmoid / piecewise/ <any_additional_model(s)>)
+docker compose run --rm linear (or sigmoid / piecewise / one_euro / <any_additional_model(s)>)
 ```
 
 The default command (as set in `docker-compose.yml`) will typically execute a driver script or a sequence like:
@@ -305,8 +348,10 @@ After this, the output should be:
 - `data/derived/tracking_derivatives.csv`
 - `data/modeled/tracking_modelled_sigma.csv`
 - `data/modeled/tracking_modelled_sigma_<any_additional_model(s)>.csv`
+- `data/modeled/one_euro_modeled.csv`
 - `data/config/linear_sigma_ranges.json`
 - `data/config/<any_additional_model(s)>_sigma_ranges.json`
+- `data/config/one_euro_params.json`
 
 If you only want to recompute derivatives or models, you can call each script directly with `docker compose run --rm <service> python ...` as shown below.
 
@@ -314,7 +359,7 @@ If you only want to recompute derivatives or models, you can call each script di
 
 ## 4. Command-line usage and plotting scenarios
 
-The scripts **kinematics.py**, along with **linear_sigma_model.py** and **any_additional_model(s)\_sigma_model.py** all expose a custom CLI.
+The scripts **kinematics.py**, along with **linear_sigma_model.py**, **any_additional_model(s)\_sigma_model.py**, and **one_euro_filter_model.py** all expose a custom CLI.
 This section shows some of the typical cases of using and utilizing the CLI to trigger the pipeline of the system, and generate different plots.
 
 ---
@@ -707,13 +752,110 @@ Output example:
 
 ---
 
+### 4.12 Velocity distribution analysis (One Euro filter)
+
+_(Per-axis |velocity| distribution across stable and fast scenario groups)_
+
+Unlike the sigma models, the One Euro filter does not calibrate bounds from acceleration statistics. Instead, the two parameters that govern its behaviour — `fc_min` and `beta` — are chosen with reference to the speed range the filter will encounter at runtime. The velocity distribution plots produced by `one_euro_filter_model.py` provide that reference: they show how fast each axis moves during stable held shots versus fast aggressive moves, so that `fc_min` and `beta` can be set with quantitative grounding rather than guesswork.
+
+**Command**
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_filter_model.py \
+    --logs data/processed/tracking_logs.csv \
+    --derived data/derived/tracking_derivatives.csv \
+    --fc-min 0.5 \
+    --beta 0.05
+```
+
+Output example:
+
+- `data/one_euro_plots/analysis/Y_rot_velocity_distribution.jpg`
+- `data/one_euro_plots/analysis/X_pose_velocity_distribution.jpg`
+
+| Y_rot – velocity distribution                                                                    | X_pose – velocity distribution                                                                     |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| ![Y_rot_velocity_distribution](data/one_euro_plots/analysis/Y_rot_velocity_distribution.jpg)    | ![X_pose_velocity_distribution](data/one_euro_plots/analysis/X_pose_velocity_distribution.jpg)    |
+
+**What these plots show**
+
+- Each plot overlays the |velocity| histogram for stable scenarios (blue) against fast scenarios (red).
+- Dashed vertical lines mark the 90th-percentile speed for each group.
+- The **stable p90** value is the highest speed expected during a held shot. `fc_min` should be set such that the filter still suppresses jitter at this speed — meaning the speed-dependent cutoff term (`beta * |velocity|`) contributes very little at the stable p90.
+- The **fast p90** value is the highest speed expected during an aggressive pan. `beta` should be set so the filter cutoff is large enough to track the signal transparently at this speed.
+- Together, the two percentile lines provide a data-driven bracket for parameter tuning: `fc_min` anchors the minimum smoothing floor, and `beta` controls how quickly the filter opens up as speed rises toward the fast p90.
+
+Per-axis overrides can be passed on the CLI if individual axes require different parameters:
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_filter_model.py \
+    --fc-min 0.5 --beta 0.05 \
+    --fc-min-x-rot 0.3 --beta-x-rot 0.08
+```
+
+---
+
+### 4.13 Smoothing simulation (One Euro filter) (raw vs smoothed motion, jitter, lag)
+
+**Command**
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_smoothing_sim.py \
+    --logs data/processed/tracking_logs.csv \
+    --config data/config/one_euro_params.json \
+    --axis Y_rot \
+    --label fast_pan_tripod_02
+```
+
+Output example:
+
+- `data/one_euro_plots/smoothing/fast_pan_tripod_02_Y_rot_one_euro.jpg`
+- `data/one_euro_plots/smoothing/still_on_tripod_01_Y_rot_one_euro.jpg` (from `--label still_on_tripod_01`)
+
+| fast_pan_tripod_02 – Y_rot                                                                             | still_on_tripod_01 – Y_rot                                                                             |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| ![fast_pan_tripod_02_Y_rot](data/one_euro_plots/smoothing/fast_pan_tripod_02_Y_rot_one_euro.jpg)       | ![still_on_tripod_01_Y_rot](data/one_euro_plots/smoothing/still_on_tripod_01_Y_rot_one_euro.jpg)       |
+
+**What these plots show**
+
+Each figure has three parts:
+
+1. **Raw vs filtered motion over time**
+   - The filtered curve tracks the raw signal closely during fast motion and damps it during slow or stationary segments.
+   - Unlike the sigma models, there is no fixed interpolation speed — the filter cutoff adapts continuously every frame based on instantaneous signal velocity.
+
+2. **Jitter metric before and after**
+   - Bars show the RMS of frame-to-frame differences, normalised by mean frame time.
+   - A held shot should show strong jitter reduction. A fast pan should show near-zero reduction, confirming the filter is not introducing smoothing lag where the motion is intentional.
+
+3. **Difference and lag estimate**
+   - The bottom plot shows `raw − filtered` over time with a cross-correlation lag estimate in milliseconds.
+   - A well-tuned One Euro filter produces near-zero lag on fast motion and visible smoothing depth on slow or stable motion — the two conditions are controlled independently by `fc_min` and `beta` respectively.
+
+The simulation can also be invoked by scenario and take number instead of label:
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_smoothing_sim.py \
+    --logs data/processed/tracking_logs.csv \
+    --config data/config/one_euro_params.json \
+    --axis X_pose \
+    --scenario still_on_tripod \
+    --take 1
+```
+
+---
+
 ## **This process can be replicated for any other models implemented in the repo, for all axes and labels present in the dataset.**
 
-### 4.12 Linear Sommthing VS Piecewise Smoothing VS Sigmoid Smoothing Comparison
+### 4.14 Linear Smoothing VS Piecewise Smoothing VS Sigmoid Smoothing VS One Euro Filter Comparison
 
-| Linear Model – controlled_handheld_pan – Y_rot                                              | Piecewise Model – controlled_handheld_pan – Y_rot                                                               | Sigmoid Model – controlled_handheld_pan – Y_rot                                                             |
-| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) |
+| Linear Model – controlled_handheld_pan – Y_rot                                              | Piecewise Model – controlled_handheld_pan – Y_rot                                                               | Sigmoid Model – controlled_handheld_pan – Y_rot                                                             | One Euro Filter – controlled_handheld_pan – Y_rot                                                                         |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| ![controlled_handheld_pan_Y_rot](data/plots/smoothing/controlled_handheld_pan_03_Y_rot.jpg) | ![controlled_handheld_pan_Y_rot](data/piecewise_plots/smoothing/controlled_handheld_pan_03_Y_rot_piecewise.jpg) | ![controlled_handheld_pan_Y_rot](data/sigmoid_plots/smoothing/controlled_handheld_pan_03_Y_rot_sigmoid.jpg) | ![controlled_handheld_pan_Y_rot](data/one_euro_plots/smoothing/controlled_handheld_pan_03_Y_rot_one_euro.jpg) |
 
 **What these plots show**
 
@@ -723,55 +865,58 @@ Output example:
   - This makes the model very useful in certain use cases, where simple jitter reduction is desired, while responsiveness is of highest priority.
 
 - ### Piecewise Model:
-  - The piecewise mapping is more aggressive generally -as shown in this sequence- It removes more high-frequency energy while still keeping the signal aligned in time.
+  - The piecewise mapping is more aggressive generally. It removes more high-frequency energy while still keeping the signal aligned in time.
   - The model is a "strong stabilizer". It applies larger level of smoothness, and is more sensitive to jitter variations, thanks to the multiple breakpoints.
   - Even with more smoothing, the lag produced by the model is essentially the same as the linear model. This proves the piecewise model ability to generalize over most use cases without introducing additional latency.
 
 - ### Sigmoid Model:
-  - The sigmoid mapping is somewhere in between the linear and piecewise models. It is the none liener model among the three.
-  - It sits -both conceptually and in practice- between the linear and piecewise models.
-  - like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the steps between those two ends is non-linear, following a sigmoid curve.
-  - Unlike the piecewise model, it does not have multiple breakpoints, but rather a smooth transition between the two ends of the range, due to its nonlinear nature.
-  - The model is a "balanced stabilizer". It applies moderate levels of smoothness, and steps gradually between jitter variations, thanks to the sigmoid curve.
-  - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases. This proves the sigmoid model ability to generalize over most use cases without introducing additional latency.
+  - The sigmoid mapping sits between the linear and piecewise models. It is the nonlinear model among the sigma-based set.
+  - Like the linear model, it balances the signal across two ends of the range, but unlike the linear model, the transition between those two ends is nonlinear, following a sigmoid curve.
+  - Unlike the piecewise model, it does not have multiple breakpoints, but rather a smooth transition between the two ends of the range.
+  - The model is a "balanced stabilizer". It applies moderate levels of smoothness and steps gradually between jitter variations.
+  - The lag produced by the model is also essentially the same as the linear and piecewise models in most cases.
 
-- ### Comparitive Analysis:
-  - Depending on the use case, one model may be preferred over the other. The linear model is a good baseline.
+- ### One Euro Filter:
+  - The One Euro filter operates on a fundamentally different principle from the three sigma models. Rather than computing rolling acceleration statistics and mapping them to a fixed interpolation speed, it estimates the instantaneous velocity of the signal every frame and uses that to set its own cutoff frequency continuously.
+  - On a stable held shot, the filter behaves as a strong low-pass filter with cutoff near `fc_min`, suppressing jitter with no required calibration to rig-specific acceleration bounds.
+  - On a fast pan, the cutoff rises proportionally to `beta * |velocity|`, allowing the filter to become nearly transparent. The transition between these two states is smooth and continuous rather than stepped.
+  - Because the parameters (`fc_min`, `beta`) describe desired output behaviour rather than measured sensor statistics, the filter generalises across different rigs and recording conditions without recalibration. This is the key distinguishing property compared to the sigma models.
+  - The expected lag on fast motion is near zero. On slow or stable motion, the filter introduces smoothing depth controlled by `fc_min`, with no fixed lag offset.
 
-  - Other models, with more sigma breakpoints/variation (e.g. the piecewise model) can offer further control over tuning options, but with potential slight latency trade-offs in certain scenarios.
+- ### Comparative Analysis:
+  - The sigma models (linear, piecewise, sigmoid) derive their smoothing strength from a rolling window of acceleration. This makes them well-suited to rigs where the noise statistics are stable and known from a calibration dataset. The piecewise model offers the finest control within this family, the sigmoid the smoothest transition, and the linear the simplest baseline.
+  - The One Euro filter does not require a calibration dataset. Its two parameters are tuned against the velocity distribution plots (§4.12) and confirmed with the simulation (§4.13). This makes it the preferred choice when recording conditions change, the rig is updated, or when a new dataset is not available for recalibration.
+  - In terms of role in the system: the linear model serves as the Safe/Basic Control (Basic Mode), the piecewise model as the Manual/Specific Control (Expert Mode), the sigmoid model as the Organic/Automated Control (Smart Mode), and the One Euro filter as the Adaptive/Hardware-Agnostic Mode.
 
-  - The difference between the linear and the piecewise models will be most visible in the mid range motion scenarios, as the multiple breakpoints implemented in the piecewise model allows it to be more sensitive to the different nuances of jitter levels in those mid-range scenarios.
-
-  - Conversely, both models will behave similarly on extreme scenarios (very static or very fast motion).
-
-  - The sigmoid model offers a middle ground between the two, with a smooth transition that can be beneficial in scenarios where a gradual transition between jitter reduction and responsiveness is desired.
-    In this current three-model setup,
-  - The linear model can be seen as the Safe/Basic Control (Basic Mode),
-  - The piecewise model as the manual/specific Control (Expert Mode),
-  - And the sigmoid model as the Organic/Automated Control (Smart Mode).
-
-  Ultimately, the choice of model will depend on the specific requirements of the application, such as the desired level of smoothness, responsiveness, and the nature of the motion being captured.
+  Ultimately, the choice of model depends on the specific requirements of the application, the stability of the recording setup, and the degree to which recalibration is feasible between sessions.
 
 ---
 
 ## 5. Runtime implementation
 
-- The logic demonstrated in `<any_model>_smoothing_sim.py` was used as pseudo-code for building the C++ scripts and Blueprints inside Unreal Engine.
-- The flexibility offered by the system allowed implementing all three models in Unreal Engine's runtime.
-- The configuration files generated by each model script (`<model>_sigma_ranges.json`) were used to set up the parameters inside Unreal Engine. This ensured consistency between the offline analysis and the real-time implementation.
+- The logic demonstrated in `<any_model>_smoothing_sim.py` and `one_euro_smoothing_sim.py` was used as pseudo-code for building the C++ scripts and Blueprints inside Unreal Engine.
+- The flexibility offered by the system allowed implementing all models in Unreal Engine's runtime with a shared interface, switchable from within the editor.
+- The configuration files generated by each model script (`<model>_sigma_ranges.json`, `one_euro_params.json`) were used to set up the parameters inside Unreal Engine. This ensured consistency between the offline analysis and the real-time implementation.
 - Once the parameters were set for each model, it was possible to switch between different models from within Unreal Engine.
-- Each model would apply its own smoothing logic, while adhering to the same overall principles:
+- Each sigma-based model applies its own smoothing logic while adhering to the same overall principles:
   - Maintain a per-axis acceleration buffer.
   - Compute rolling σ with a fixed window size.
   - Map σ to InterpSpeed using pre-computed bounds.
   - Apply FInterpTo each frame.
-- The implemented functionality to calculate the average speed on the positional axes was utilized to update the shader material of the scanned object "the duck" dynamically. This fulfills the requirements of the shader programming task and extends the work applied on the visualization task.
+- The One Euro filter follows a different runtime path:
+  - Maintain per-axis filter state (previous filtered value, previous filtered derivative, previous timestamp).
+  - Compute instantaneous velocity via causal backward difference on the filtered signal.
+  - Smooth the derivative with a fixed-cutoff EMA.
+  - Compute the adaptive cutoff: `fc = fc_min + beta * |smoothed_derivative|`.
+  - Apply the adaptive EMA to the primary signal.
+  - For rotation axes, apply angle unwrapping before filtering and wrap output back to (−180, 180] degrees.
+- The implemented functionality to calculate the average speed on the positional axes was utilised to update the shader material of the scanned object dynamically. This fulfils the requirements of the shader programming task and extends the work applied on the visualisation task.
 
 ---
 
 ## 6. Validation Pipeline
 
-Unlike the simulation pipeline, the bash script running the validation service triggers `validator.py` to automatically computes the metrics and generates the plots of all labels and axes in every available _.log_ file placed in `data/validation/raw/`. With that said, the validation script can also be run on files individually with custom CLI command using the argument "--file".
+Unlike the simulation pipeline, the bash script running the validation service triggers `validator.py` to automatically compute the metrics and generate the plots of all labels and axes in every available _.log_ file placed in `data/validation/raw/`. With that said, the validation script can also be run on files individually with custom CLI command using the argument "--file".
 
 **Command**
 
@@ -819,7 +964,7 @@ docker compose run --rm validation\
 
 #### 6.3.2 Poly-model Comparison
 
-- The validation pipeline can utilize the 6DOF version of the processed logs. This version can be used as input to any of the simulation scripts (`<model>_smoothing_sim.py`). This allows users to see how would the shot have behaved if any of the models were applied during runtime.
+- The validation pipeline can utilize the 6DOF version of the processed logs. This version can be used as input to any of the simulation scripts (`<model>_smoothing_sim.py`, `one_euro_smoothing_sim.py`). This allows users to see how a shot would have behaved if any of the models were applied during runtime.
 - This provides valuable insights into the comparative performance of different smoothing algorithms on the same shot or scenario.
 
 **_Example 1 (Set to Linear Model at Runtime):_**
@@ -847,7 +992,7 @@ output example:
 
 **What these plots show**
 
-- These plots show -side by side- how a specific axis would behave in this shot if the piecewise model was selected at runtime.
+- These plots show side by side how a specific axis would behave in this shot if the piecewise model was selected at runtime.
 
 **_Example 2 (Set to Linear Model at Runtime):_**
 
@@ -874,11 +1019,24 @@ output example:
 
 **What these plots show**
 
-- These plots show -side by side- how a specific axis would behave in this shot if the sigmoid model was selected at runtime.
+- These plots show side by side how a specific axis would behave in this shot if the sigmoid model was selected at runtime.
+
+The One Euro filter simulation script can be used in the same way. For a shot recorded at runtime under any model, the 6DOF CSV from `data/validation/simulate/` can be passed directly to `one_euro_smoothing_sim.py`:
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_smoothing_sim.py \
+      --logs data/validation/simulate/<label>_sim.csv \
+      --config data/config/one_euro_params.json \
+      --axis Y_rot \
+      --label <label>
+```
+
+This produces a plot under `data/one_euro_plots/smoothing/` showing how the One Euro filter would have performed on the same shot, enabling direct comparison with the runtime result and with the other model simulations.
 
 ---
 
-**Findings:** _The setup allows for accessing direct comparitive analysis between the different models, without the complexity and hassle of replicating the exact same physical camera movement for another test shot, which requires extensive setup and expensive machinery like advanced robotic arms._
+**Findings:** _The setup allows for direct comparative analysis between the different models, without the complexity and hassle of replicating the exact same physical camera movement for another test shot, which requires extensive setup and expensive machinery like advanced robotic arms._
 
 ---
 
@@ -912,7 +1070,7 @@ output example:
 
 **What these plots show**
 
-- The graph shows a side-by-side perfromance comparison of the piecewise model across the runtime environment and the offline simulation.
+- The graph shows a side-by-side performance comparison of the piecewise model across the runtime environment and the offline simulation.
 
 **_Example 2 (Set to sigmoid Model at Runtime and simulation):_**
 
@@ -937,11 +1095,11 @@ docker compose run --rm sigmoid \
 
 **What these plots show**
 
-- The graph shows a side-by-side perfromance comparison of the sigmoid model across the runtime environment and the offline simulation.
+- The graph shows a side-by-side performance comparison of the sigmoid model across the runtime environment and the offline simulation.
 
 ---
 
-**Findings:** _The similarity in both the computational and visual results asserts the models' stability across simulation and runtime.This proofs that even with external factors like signal delay, environmental changes during shooting, and others, the models are performing as expected._
+**Findings:** _The similarity in both the computational and visual results asserts the models' stability across simulation and runtime. This proves that even with external factors like signal delay, environmental changes during shooting, and others, the models are performing as expected._
 
 ---
 
@@ -955,8 +1113,8 @@ By launching the system with `docker compose up --build -d`, if there are any .l
 
 **What these plots show**
 
-- These plots are from differnt shots, each had a differnt model set at runtime.
-- No matter the chosen model or the targeted axis, the validation pipeline provides those insightful plots, making it a robust and relible validation tool for any runtime session.
+- These plots are from different shots, each with a different model set at runtime.
+- No matter the chosen model or the targeted axis, the validation pipeline provides those insightful plots, making it a robust and reliable validation tool for any runtime session.
 
 ---
 
@@ -968,19 +1126,19 @@ This project is structured so that individual components can be replaced or exte
   Any system that outputs `tracking_logs.csv` with the same schema can plug into the pipeline: different trackers, different scenes, or even synthetic motion.
 
 - **Kinematics and features**
-  `kinematics.py` centralises time-based derivatives. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
+  `kinematics.py` centralises time-based derivatives using a causal backward-difference scheme shared by all models. Additional features (e.g. jerk, windowed energy, frequency-domain metrics) can be added here without touching the model code.
 
 - **Models**
   - `linear_sigma_model.py` implements a single, interpretable baseline.
-    `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mappings strategies based on their sigma breakpoints and speed ranges.
-  - Each model reads from `tracking_derivatives.csv` and writes to its own modelled CSV `<model>_sigma_model.csv`, and its own configuration JSON `<model>_sigma_model.json`.
+  - `<any_additional_model(s)>_sigma_model.py` file(s) implement alternative mapping strategies based on their sigma breakpoints and speed ranges.
+  - Each sigma model reads from `tracking_derivatives.csv` and writes to its own modelled CSV and configuration JSON.
+  - `one_euro_filter_model.py` implements a velocity-adaptive filter that does not use sigma or acceleration bounds. It reads from both `tracking_logs.csv` and `tracking_derivatives.csv`, writes `one_euro_modeled.csv` and `one_euro_params.json`, and follows the same three-step service structure (parse → kinematics → model) as the sigma models. New models with fundamentally different operating principles can be added in the same way, each as a self-contained script with its own service and bash runner.
 
 - **Validation**
   - The validation pipeline processes the raw .log files at `data/validation/raw` and creates the .csv files needed for the service.
-
-  - Each runtime session from any chosen model would have 6 validation plots, one for each axis, to make it possible to validate the smoothing performance during runtime on any of the models.
-  - The generated .csv files at `data/validation/simualte` can be utilzed to run offline simualtion on any `<model>_smoothing_sim.py`scripts. This allows direct comparison across the differnt models on the same shot.
-  - The same files can be furhter utilized to provide direct comparison across the differnt environments on the same model.
+  - Each runtime session from any chosen model produces 6 validation plots, one for each axis.
+  - The generated .csv files at `data/validation/simulate` can be utilised to run offline simulation on any `<model>_smoothing_sim.py` or `one_euro_smoothing_sim.py` script, enabling direct cross-model comparison on the same shot.
+  - The same files can be further utilised to provide direct comparison across different environments on the same model.
 
 ---
 
@@ -988,24 +1146,24 @@ This project is structured so that individual components can be replaced or exte
 
 To reproduce the core results:
 
-1. Provide or generate raw .log files `data/raw/` to generate the csv files required by the modelling pipeline
+1. Provide or generate raw .log files in `data/raw/` to generate the csv files required by the modelling pipeline.
 
 2. Run the pipeline inside Docker:
 
    ```bash
    docker compose build
-   docker compose run --rm linear   # or any other model/service
+   docker compose run --rm linear      # or piecewise / sigmoid / one_euro
    ```
 
 3. Generate any of the example plots using the CLI commands as shown in §4.
 
-4. Provide or generate raw .log files `data/validation/raw/` to generate the csv files required by the validation pipeline
+4. Provide or generate raw .log files in `data/validation/raw/` to generate the csv files required by the validation pipeline.
 
-5. Run the pipeline inside Docker:
+5. Run the validation pipeline inside Docker:
 
    ```bash
    docker compose build
-   docker compose run --rm validation   # or any other service
+   docker compose run --rm validation
    ```
 
-The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability when testing with adding new models or datasets.
+The combination of the structured datasets, modular scripts, and Docker-based execution aims to make the system transparent, reproducible, and easy to extend for further scalability when testing with new models or datasets.
