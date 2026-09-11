@@ -142,7 +142,6 @@ At the top level you should see something close to:
     - computes per-axis jitter and lag metrics to validate parameter choices,
     - writes the filtered output to `data/modeled/one_euro_modeled.csv`,
     - writes configuration to `data/config/one_euro_params.json`,
-    - includes plotting utilities for velocity distributions and filtered overviews.
 
   - **`one_euro_smoothing_sim.py`** – replays a single take and axis using the One Euro
     filter frame by frame, applying per-axis parameters from `one_euro_params.json`.
@@ -754,37 +753,52 @@ Output example:
 
 ### 4.12 Velocity distribution analysis (One Euro filter)
 
-_(Per-axis |velocity| distribution across stable and fast scenario groups)_
+_(Per-axis |velocity| distribution for a specific scenario or across scenario groups)_
 
-Unlike the sigma models, the One Euro filter does not calibrate bounds from acceleration statistics. Instead, the two parameters that govern its behaviour — `fc_min` and `beta` — are chosen with reference to the speed range the filter will encounter at runtime. The velocity distribution plots produced by `one_euro_filter_model.py` provide that reference: they show how fast each axis moves during stable held shots versus fast aggressive moves, so that `fc_min` and `beta` can be set with quantitative grounding rather than guesswork.
+Unlike the sigma models, the One Euro filter does not calibrate bounds from acceleration statistics. Instead, the two parameters that govern its behaviour — `fc_min` and `beta` — are chosen with reference to the speed range the filter will encounter at runtime. The velocity distribution plots produced by `one_euro_filter_model.py` provide that reference.
 
-**Command**
+The plotting CLI supports two modes:
+
+- **Scenario-specific** (`--plot-axis` + `--plot-scenario`): plots the |velocity| histogram for a single named scenario. Useful for examining the speed profile of one motion type directly.
+- **Group overview** (`--plot-axis` alone): overlays stable and fast scenario groups as two histograms. Useful as a global reference for setting `fc_min` and `beta` across the full dataset.
+
+In both modes, running the script without `--plot-axis` still computes and writes the config JSON — no plot is generated unless the argument is provided.
+
+**Command (scenario-specific)**
 
 ```bash
 docker compose run --rm one_euro \
   python one_euro_filter_model.py \
     --logs data/processed/tracking_logs.csv \
     --derived data/derived/tracking_derivatives.csv \
-    --fc-min 0.5 \
-    --beta 0.05
+    --plot-axis Y_rot \
+    --plot-scenario fast_pan_tripod
 ```
 
-Output example:
+**Command (group overview)**
 
-- `data/one_euro_plots/analysis/Y_rot_velocity_distribution.jpg`
-- `data/one_euro_plots/analysis/X_pose_velocity_distribution.jpg`
+```bash
+docker compose run --rm one_euro \
+  python one_euro_filter_model.py \
+    --logs data/processed/tracking_logs.csv \
+    --derived data/derived/tracking_derivatives.csv \
+    --plot-axis Y_rot
+```
 
-| Y_rot – velocity distribution                                                                    | X_pose – velocity distribution                                                                     |
-| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
-| ![Y_rot_velocity_distribution](data/one_euro_plots/analysis/Y_rot_velocity_distribution.jpg)    | ![X_pose_velocity_distribution](data/one_euro_plots/analysis/X_pose_velocity_distribution.jpg)    |
+Output example (scenario-specific):
+
+- `data/one_euro_plots/analysis/Y_rot_fast_pan_tripod_velocity_distribution.jpg`
+- `data/one_euro_plots/analysis/X_pose_fast_pan_tripod_velocity_distribution.jpg` (from `--plot-axis X_pose --plot-scenario fast_pan_tripod`)
+
+| Y_rot – fast_pan_tripod                                                                                                          | X_pose – fast_pan_tripod                                                                                                           |
+| -------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| ![Y_rot_velocity_distribution](data/one_euro_plots/analysis/Y_rot_fast_pan_tripod_velocity_distribution.jpg)                    | ![X_pose_velocity_distribution](data/one_euro_plots/analysis/X_pose_fast_pan_tripod_velocity_distribution.jpg)                    |
 
 **What these plots show**
 
-- Each plot overlays the |velocity| histogram for stable scenarios (blue) against fast scenarios (red).
-- Dashed vertical lines mark the 90th-percentile speed for each group.
-- The **stable p90** value is the highest speed expected during a held shot. `fc_min` should be set such that the filter still suppresses jitter at this speed — meaning the speed-dependent cutoff term (`beta * |velocity|`) contributes very little at the stable p90.
-- The **fast p90** value is the highest speed expected during an aggressive pan. `beta` should be set so the filter cutoff is large enough to track the signal transparently at this speed.
-- Together, the two percentile lines provide a data-driven bracket for parameter tuning: `fc_min` anchors the minimum smoothing floor, and `beta` controls how quickly the filter opens up as speed rises toward the fast p90.
+- In scenario-specific mode, a single histogram shows the |velocity| distribution for that scenario, with a dashed line marking the 90th percentile speed.
+- In group overview mode, stable and fast scenario groups are overlaid, with separate p90 lines for each group.
+- The **p90** value is the primary tuning reference: `fc_min` should keep the filter smoothing at the stable p90 speed, and `beta` should open the cutoff to near-transparency by the fast p90 speed.
 
 Per-axis overrides can be passed on the CLI if individual axes require different parameters:
 
@@ -797,7 +811,7 @@ docker compose run --rm one_euro \
 
 ---
 
-### 4.13 Smoothing simulation (One Euro filter) (raw vs smoothed motion, jitter, lag)
+### 4.13 Smoothing simulation (One Euro filter) (raw vs filtered motion, jitter, lag)
 
 **Command**
 
@@ -823,17 +837,31 @@ Output example:
 
 Each figure has three parts:
 
-1. **Raw vs filtered motion over time**
+1. **Raw vs filtered motion over time (full take)**
+   - The full take is shown, including the initial filter convergence window. A vertical dashed orange line marks the settle boundary (default: 3 seconds from the first valid sample), indicating where steady-state metric computation begins.
    - The filtered curve tracks the raw signal closely during fast motion and damps it during slow or stationary segments.
    - Unlike the sigma models, there is no fixed interpolation speed — the filter cutoff adapts continuously every frame based on instantaneous signal velocity.
 
-2. **Jitter metric before and after**
-   - Bars show the RMS of frame-to-frame differences, normalised by mean frame time.
+2. **Jitter metric before and after (settled region only)**
+   - Bars show the RMS of frame-to-frame differences, normalised by mean frame time, computed only on frames after the settle boundary.
+   - Excluding the convergence window ensures the metric reflects steady-state filter behaviour rather than the initial transient.
    - A held shot should show strong jitter reduction. A fast pan should show near-zero reduction, confirming the filter is not introducing smoothing lag where the motion is intentional.
 
-3. **Difference and lag estimate**
-   - The bottom plot shows `raw − filtered` over time with a cross-correlation lag estimate in milliseconds.
+3. **Difference and lag estimate (settled region only)**
+   - The bottom plot shows `raw − filtered` over the settled region, with a cross-correlation lag estimate in milliseconds.
    - A well-tuned One Euro filter produces near-zero lag on fast motion and visible smoothing depth on slow or stable motion — the two conditions are controlled independently by `fc_min` and `beta` respectively.
+
+The settle window can be adjusted with `--settle-seconds` (default: 3.0). Set it to 0 to compute metrics over the full take:
+
+```bash
+docker compose run --rm one_euro \
+  python one_euro_smoothing_sim.py \
+    --logs data/processed/tracking_logs.csv \
+    --config data/config/one_euro_params.json \
+    --axis Y_rot \
+    --label still_on_tripod_01 \
+    --settle-seconds 5.0
+```
 
 The simulation can also be invoked by scenario and take number instead of label:
 

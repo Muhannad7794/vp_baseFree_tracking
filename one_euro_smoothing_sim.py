@@ -337,13 +337,23 @@ def make_plots(
     axis: str,
     sim: Dict[str, np.ndarray],
     output_dir: str,
+    settle_seconds: float = 3.0,
 ) -> None:
     """
     Produce a three-panel JPG comparison plot for one label and axis.
 
-    Panel 1 — raw vs filtered signal over time.
-    Panel 2 — jitter bar chart: raw vs filtered RMS jitter.
-    Panel 3 — difference (raw - filtered) over time with lag annotation.
+    Panel 1 — raw vs filtered signal over the full take duration.
+    Panel 2 — jitter bar chart: raw vs filtered RMS jitter, computed over
+              the settled region only (after settle_seconds).
+    Panel 3 — difference (raw - filtered) over the settled region, with
+              lag estimate. The settle period is excluded because the filter
+              state is still converging during that window, and any motion
+              event at take start dominates the lag cross-correlation and
+              inflates the jitter metric without representing steady-state
+              filter behaviour.
+
+    A vertical dashed line at t = settle_seconds in panels 1 and 3 marks
+    where metric computation begins.
 
     The layout mirrors the other model sim scripts to allow direct visual
     comparison of filtering behaviour across models on the same take.
@@ -356,39 +366,49 @@ def make_plots(
     raw = sim["raw"]
     filtered = sim["filtered"]
 
-    # Align filtered signal to raw at t=0 for visual comparison.
-    # The filter initialises at the first sample, so no persistent offset
-    # is expected, but logging start-up differences can introduce a small
-    # constant shift that obscures the comparison.
     valid = ~(np.isnan(raw) | np.isnan(filtered))
-    if valid.any():
-        start_offset = float(raw[valid][0] - filtered[valid][0])
-        filtered_aligned = filtered + start_offset
-    else:
-        filtered_aligned = filtered
 
-    j_raw = jitter_metric(raw[valid], dt[valid])
-    j_filt = jitter_metric(filtered_aligned[valid], dt[valid])
+    # Settled region: frames after the settle window, measured from the
+    # first valid timestamp in the take.
+    t_start = t[valid][0] if valid.any() else 0.0
+    settled = valid & (t >= t_start + settle_seconds)
+
+    # Fall back to the full valid region if settle window covers the whole take.
+    if settled.sum() < 10:
+        settled = valid
+        settle_label = "(full take)"
+    else:
+        settle_label = f"(after {settle_seconds:.0f}s settle)"
+
+    j_raw = jitter_metric(raw[settled], dt[settled])
+    j_filt = jitter_metric(filtered[settled], dt[settled])
     j_reduction = (j_raw / j_filt) if j_filt > 0 else float("inf")
-    lag_sec = lag_estimate(raw[valid], filtered_aligned[valid], dt[valid])
+    lag_sec = lag_estimate(raw[settled], filtered[settled], dt[settled])
 
     plt.figure(figsize=(12, 9))
 
-    # Panel 1: raw vs filtered
+    # Panel 1: raw vs filtered — full take
     ax1 = plt.subplot(3, 1, 1)
     ax1.plot(t[valid], raw[valid], linewidth=1, label="raw", color="gray")
     ax1.plot(
         t[valid],
-        filtered_aligned[valid],
+        filtered[valid],
         linewidth=1.2,
         label="filtered (One Euro)",
         color="royalblue",
     )
+    ax1.axvline(
+        t_start + settle_seconds,
+        color="orange",
+        linestyle="--",
+        linewidth=0.9,
+        label=f"settle boundary ({settle_seconds:.0f}s)",
+    )
     ax1.set_ylabel("Amplitude")
     ax1.set_title(f"{label} – {axis}: raw vs filtered (One Euro)")
-    ax1.legend()
+    ax1.legend(fontsize="small")
 
-    # Panel 2: jitter bar chart
+    # Panel 2: jitter bar chart — settled region only
     ax2 = plt.subplot(3, 1, 2)
     bars_x = np.arange(2)
     bars_vals = [j_raw, j_filt]
@@ -399,24 +419,26 @@ def make_plots(
     ymax = max(j_raw, j_filt)
     ax2.set_ylim(0, ymax * 1.2 if ymax > 0 else 1.0)
     ax2.set_ylabel("jitter (RMS of diff/dt)")
-    if j_filt > 0:
-        ax2.set_title(
-            f"Jitter: {j_raw:.3f} → {j_filt:.3f}  ({j_reduction:.2f}x reduction)"
-        )
-    else:
-        ax2.set_title(f"Jitter: {j_raw:.3f} → {j_filt:.3f}")
+    title_jitter = (
+        f"Jitter {settle_label}: {j_raw:.3f} → {j_filt:.3f}  ({j_reduction:.2f}x reduction)"
+        if j_filt > 0
+        else f"Jitter {settle_label}: {j_raw:.3f} → {j_filt:.3f}"
+    )
+    ax2.set_title(title_jitter)
     ax2.grid(axis="y", linestyle="--", alpha=0.4)
 
-    # Panel 3: difference over time
-    ax3 = plt.subplot(3, 1, 3, sharex=ax1)
-    diff = raw[valid] - filtered_aligned[valid]
-    ax3.plot(t[valid], diff, linewidth=1, color="#0b9ea8", label="raw − filtered")
+    # Panel 3: difference over settled region
+    ax3 = plt.subplot(3, 1, 3)
+    diff_settled = raw[settled] - filtered[settled]
+    ax3.plot(
+        t[settled], diff_settled, linewidth=1, color="#0b9ea8", label="raw − filtered"
+    )
     ax3.axhline(0, color="black", linestyle="--", linewidth=0.8)
-    ax3.fill_between(t[valid], 0, diff, color="gray", alpha=0.2)
+    ax3.fill_between(t[settled], 0, diff_settled, color="gray", alpha=0.2)
     ax3.set_xlabel("Time (s)")
     ax3.set_ylabel("Difference")
-    ax3.set_title(f"Lag estimate ≈ {lag_sec * 1000:.1f} ms")
-    ax3.legend()
+    ax3.set_title(f"Lag estimate {settle_label} ≈ {lag_sec * 1000:.1f} ms")
+    ax3.legend(fontsize="small")
 
     plt.tight_layout()
     plt.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -424,7 +446,7 @@ def make_plots(
 
     print(
         f"[one_euro_smoothing_sim] Saved plot to {out_path}\n"
-        f"  Jitter raw      : {j_raw:.4f}\n"
+        f"  Jitter raw      : {j_raw:.4f}  {settle_label}\n"
         f"  Jitter filtered : {j_filt:.4f}\n"
         f"  Reduction       : {j_reduction:.2f}x\n"
         f"  Lag estimate    : {lag_sec * 1000:.1f} ms"
@@ -485,6 +507,17 @@ def main() -> None:
         default="data/one_euro_plots/smoothing",
         help="Directory to save JPG plots.",
     )
+    parser.add_argument(
+        "--settle-seconds",
+        type=float,
+        default=3.0,
+        help=(
+            "Seconds to exclude from the start of each take when computing "
+            "jitter and lag metrics. The filter state converges during this "
+            "window and any motion event at take start would otherwise dominate "
+            "both metrics. Default: 3.0. Set to 0 to disable."
+        ),
+    )
 
     args = parser.parse_args()
 
@@ -526,7 +559,13 @@ def main() -> None:
         d_cutoff=d_cutoff,
     )
 
-    make_plots(label, args.axis, sim, output_dir=args.output_dir)
+    make_plots(
+        label,
+        args.axis,
+        sim,
+        output_dir=args.output_dir,
+        settle_seconds=args.settle_seconds,
+    )
 
 
 if __name__ == "__main__":

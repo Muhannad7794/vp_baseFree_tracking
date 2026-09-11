@@ -524,143 +524,117 @@ def plot_velocity_distributions(
     deriv_df: pd.DataFrame,
     dist_stats: Dict[str, Dict[str, float]],
     output_dir: str,
+    axis_filter: str = None,
+    scenario_filter: str = None,
 ) -> None:
     """
-    For each axis, plot the |velocity| distribution for stable vs fast
-    scenarios as overlaid histograms with percentile annotations.
+    Plot the |velocity| distribution for the specified axis and scenario.
 
-    These plots serve as the visual justification for the chosen fc_min
-    and beta values: the stable p90 value is the speed at which the filter
-    should still be at maximum smoothing (fc_min dominant), and the fast
-    p90 value is the speed at which the filter should be at minimum lag
-    (beta * speed term dominant).
+    Two modes:
+      - scenario_filter given: plots a single histogram for that scenario only.
+        Useful for examining the speed range of one specific motion type.
+      - scenario_filter omitted: overlays stable vs fast scenario groups.
+        Useful as a global reference for setting fc_min and beta.
+
+    In both modes, axis_filter restricts plotting to a single axis.
+    When axis_filter is omitted, all axes are plotted.
     """
     os.makedirs(output_dir, exist_ok=True)
 
-    for axis in ALL_AXES:
+    axes_to_plot = [axis_filter] if axis_filter else ALL_AXES
+
+    for axis in axes_to_plot:
         v_col = f"V_{axis}"
         if v_col not in deriv_df.columns:
             continue
 
-        stable_mask = deriv_df["scenario"].isin(STABLE_SCENARIOS)
-        fast_mask = deriv_df["scenario"].isin(FAST_SCENARIOS)
-
-        stable_speeds = deriv_df.loc[stable_mask, v_col].abs().dropna().to_numpy()
-        fast_speeds = deriv_df.loc[fast_mask, v_col].abs().dropna().to_numpy()
-
         fig, ax = plt.subplots(figsize=(10, 5))
 
-        # Clip extreme outliers for display clarity — do not affect stored stats.
-        clip = np.percentile(fast_speeds, 99) if len(fast_speeds) else 1.0
-        bins = np.linspace(0, clip, 60)
+        if scenario_filter:
+            # Single-scenario mode.
+            scen_mask = deriv_df["scenario"] == scenario_filter
+            speeds = deriv_df.loc[scen_mask, v_col].abs().dropna().to_numpy()
 
-        ax.hist(
-            stable_speeds.clip(0, clip),
-            bins=bins,
-            alpha=0.6,
-            label="stable scenarios",
-            color="steelblue",
-        )
-        ax.hist(
-            fast_speeds.clip(0, clip),
-            bins=bins,
-            alpha=0.6,
-            label="fast scenarios",
-            color="tomato",
-        )
+            if len(speeds) == 0:
+                print(
+                    f"  [plot] No data for scenario '{scenario_filter}' on axis {axis}. Skipping."
+                )
+                plt.close()
+                continue
 
-        if axis in dist_stats:
-            s = dist_stats[axis]
+            clip = np.percentile(speeds, 99)
+            bins = np.linspace(0, clip, 60)
+            p90 = float(np.percentile(speeds, 90))
+
+            ax.hist(
+                speeds.clip(0, clip),
+                bins=bins,
+                alpha=0.7,
+                label=scenario_filter,
+                color="steelblue",
+            )
             ax.axvline(
-                s["p90_stable"],
+                p90,
                 color="steelblue",
                 linestyle="--",
                 linewidth=1.2,
-                label=f"stable p90 = {s['p90_stable']:.3f}",
+                label=f"p90 = {p90:.3f}",
             )
-            ax.axvline(
-                s["p90_fast"],
+            ax.set_title(f"{axis} — velocity distribution: {scenario_filter}")
+            filename = f"{axis}_{scenario_filter}_velocity_distribution.jpg"
+
+        else:
+            # Stable vs fast group overview mode.
+            stable_mask = deriv_df["scenario"].isin(STABLE_SCENARIOS)
+            fast_mask = deriv_df["scenario"].isin(FAST_SCENARIOS)
+
+            stable_speeds = deriv_df.loc[stable_mask, v_col].abs().dropna().to_numpy()
+            fast_speeds = deriv_df.loc[fast_mask, v_col].abs().dropna().to_numpy()
+
+            clip = np.percentile(fast_speeds, 99) if len(fast_speeds) else 1.0
+            bins = np.linspace(0, clip, 60)
+
+            ax.hist(
+                stable_speeds.clip(0, clip),
+                bins=bins,
+                alpha=0.6,
+                label="stable scenarios",
+                color="steelblue",
+            )
+            ax.hist(
+                fast_speeds.clip(0, clip),
+                bins=bins,
+                alpha=0.6,
+                label="fast scenarios",
                 color="tomato",
-                linestyle="--",
-                linewidth=1.2,
-                label=f"fast p90 = {s['p90_fast']:.3f}",
             )
+
+            if axis in dist_stats:
+                s = dist_stats[axis]
+                ax.axvline(
+                    s["p90_stable"],
+                    color="steelblue",
+                    linestyle="--",
+                    linewidth=1.2,
+                    label=f"stable p90 = {s['p90_stable']:.3f}",
+                )
+                ax.axvline(
+                    s["p90_fast"],
+                    color="tomato",
+                    linestyle="--",
+                    linewidth=1.2,
+                    label=f"fast p90 = {s['p90_fast']:.3f}",
+                )
+
+            ax.set_title(f"{axis} — velocity distribution by scenario group")
+            filename = f"{axis}_velocity_distribution.jpg"
 
         ax.set_xlabel("|velocity| (units/s)")
         ax.set_ylabel("frame count")
-        ax.set_title(f"{axis} — velocity distribution by scenario group")
         ax.legend(fontsize="small")
 
         plt.tight_layout()
-        out_path = os.path.join(output_dir, f"{axis}_velocity_distribution.jpg")
-        plt.savefig(out_path, dpi=150, bbox_inches="tight")
-        plt.close()
-        print(f"  [plot] Saved {out_path}")
-
-
-def plot_filtered_overview(
-    result_df: pd.DataFrame,
-    output_dir: str,
-) -> None:
-    """
-    For each axis, produce a two-panel overview plot across the full dataset:
-      Panel 1 — raw vs filtered signal over all frames (chronological index).
-      Panel 2 — frame-to-frame difference (raw - filtered), showing smoothing depth.
-
-    These are aggregate views across all labels concatenated in order — intended
-    for a quick global check that the filter is active on all axes and not
-    over- or under-smoothing catastrophically. Per-take detail plots are
-    produced by the simulation script.
-    """
-    os.makedirs(output_dir, exist_ok=True)
-
-    for axis in ALL_AXES:
-        if axis not in result_df.columns:
-            continue
-        filt_col = f"filtered_{axis}"
-        if filt_col not in result_df.columns:
-            continue
-
-        raw = result_df[axis].to_numpy(dtype=float)
-        filt = result_df[filt_col].to_numpy(dtype=float)
-        idx = np.arange(len(raw))
-
-        valid = ~(np.isnan(raw) | np.isnan(filt))
-
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 7), sharex=True)
-
-        ax1.plot(
-            idx[valid], raw[valid], linewidth=0.5, alpha=0.7, label="raw", color="gray"
-        )
-        ax1.plot(
-            idx[valid],
-            filt[valid],
-            linewidth=0.8,
-            label="filtered (One Euro)",
-            color="royalblue",
-        )
-        ax1.set_ylabel("signal value")
-        ax1.set_title(
-            f"{axis} — raw vs filtered (full dataset, all labels concatenated)"
-        )
-        ax1.legend(fontsize="small")
-
-        diff = raw - filt
-        ax2.plot(
-            idx[valid],
-            diff[valid],
-            linewidth=0.5,
-            color="coral",
-            label="raw − filtered",
-        )
-        ax2.axhline(0.0, color="black", linewidth=0.6, linestyle="--")
-        ax2.set_ylabel("difference")
-        ax2.set_xlabel("frame index")
-        ax2.set_title("Smoothing delta (positive = filter is behind raw)")
-        ax2.legend(fontsize="small")
-
-        plt.tight_layout()
-        out_path = os.path.join(output_dir, f"{axis}_filtered_overview.jpg")
+        out_path = os.path.join(output_dir, filename)
         plt.savefig(out_path, dpi=150, bbox_inches="tight")
         plt.close()
         print(f"  [plot] Saved {out_path}")
@@ -757,16 +731,30 @@ def parse_args() -> argparse.Namespace:
         help="Output path for one_euro_params.json.",
     )
     parser.add_argument(
+        "--plot-axis",
+        type=str,
+        default=None,
+        help=(
+            "Axis for which to generate a velocity distribution plot "
+            "(e.g. Y_rot, X_pose). Use alone for a stable vs fast group "
+            "overview, or combine with --plot-scenario for a single scenario."
+        ),
+    )
+    parser.add_argument(
+        "--plot-scenario",
+        type=str,
+        default=None,
+        help=(
+            "Scenario to plot (e.g. fast_pan_tripod). Used with --plot-axis. "
+            "When given, the velocity distribution is computed for that scenario "
+            "only. When omitted, stable and fast scenario groups are overlaid."
+        ),
+    )
+    parser.add_argument(
         "--plot-analysis-dir",
         type=str,
         default="data/one_euro_plots/analysis",
-        help="Directory for velocity distribution plots.",
-    )
-    parser.add_argument(
-        "--plot-modeled-dir",
-        type=str,
-        default="data/one_euro_plots/modeled",
-        help="Directory for raw vs filtered overview plots.",
+        help="Directory where velocity distribution plots are written.",
     )
 
     # Per-axis parameter overrides — allow individual axis tuning from the CLI
@@ -852,7 +840,7 @@ def main() -> None:
         raise ValueError(f"tracking_logs.csv is missing columns: {missing}")
 
     # --- Step 1: Velocity distribution analysis ---
-    print("\n[one_euro_filter_model] Step 1/4: Analysing velocity distributions...")
+    print("\n[one_euro_filter_model] Step 1/3: Analysing velocity distributions...")
     dist_stats = analyse_velocity_distributions(deriv_df)
 
     print("\n  Per-axis velocity summary (|V| in signal units/s):")
@@ -863,12 +851,12 @@ def main() -> None:
 
     # --- Step 2: Run filter across full dataset ---
     print(
-        "\n[one_euro_filter_model] Step 2/4: Running One Euro filter across full dataset..."
+        "\n[one_euro_filter_model] Step 2/3: Running One Euro filter across full dataset..."
     )
     result_df, metrics = run_filter_on_dataset(logs_df, axis_params)
 
     # --- Step 3: Write outputs ---
-    print("\n[one_euro_filter_model] Step 3/4: Writing output files...")
+    print("\n[one_euro_filter_model] Step 3/3: Writing output files...")
 
     os.makedirs(os.path.dirname(args.output), exist_ok=True)
     result_df.to_csv(args.output, index=False)
@@ -880,10 +868,27 @@ def main() -> None:
         json.dump(config, f, indent=2)
     print(f"  Config JSON written to {args.config_output}")
 
-    # --- Step 4: Plots ---
-    print("\n[one_euro_filter_model] Step 4/4: Generating plots...")
-    plot_velocity_distributions(deriv_df, dist_stats, args.plot_analysis_dir)
-    plot_filtered_overview(result_df, args.plot_modeled_dir)
+    # --- Optional: velocity distribution plot for one axis ---
+    if args.plot_axis:
+        if args.plot_axis not in ALL_AXES:
+            print(
+                f"  [warning] --plot-axis '{args.plot_axis}' is not a recognised axis. "
+                f"Valid axes: {ALL_AXES}"
+            )
+        else:
+            print(
+                f"\n[one_euro_filter_model] Generating velocity distribution plot "
+                f"for axis={args.plot_axis}"
+                + (f", scenario={args.plot_scenario}" if args.plot_scenario else "")
+                + "..."
+            )
+            plot_velocity_distributions(
+                deriv_df,
+                dist_stats,
+                args.plot_analysis_dir,
+                axis_filter=args.plot_axis,
+                scenario_filter=args.plot_scenario,
+            )
 
     print("\n[one_euro_filter_model] Done.")
 
